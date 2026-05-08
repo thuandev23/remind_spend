@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
+		71E828952FADD20000CFDABB /* BankRegexParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828962FADD20000CFDABB /* BankRegexParserTests.swift */; };
+		71E828972FADD20000CFDABB /* KeychainQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828982FADD20000CFDABB /* KeychainQueueTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		71E828752FADD0AA00CFDABB /* TransactionIntentExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 71E8286C2FADD0AA00CFDABB /* TransactionIntentExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		71E828862FADD10600CFDABB /* ShortcutInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828802FADD10600CFDABB /* ShortcutInstaller.swift */; };
@@ -70,6 +72,8 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
+		71E828962FADD20000CFDABB /* BankRegexParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankRegexParserTests.swift; sourceTree = "<group>"; };
+		71E828982FADD20000CFDABB /* KeychainQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainQueueTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		71E8286C2FADD0AA00CFDABB /* TransactionIntentExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = TransactionIntentExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -127,6 +131,8 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				71E828962FADD20000CFDABB /* BankRegexParserTests.swift */,
+				71E828982FADD20000CFDABB /* KeychainQueueTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -376,6 +382,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				71E828952FADD20000CFDABB /* BankRegexParserTests.swift in Sources */,
+				71E828972FADD20000CFDABB /* KeychainQueueTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -155,9 +155,10 @@ class BridgeService {
 
   static PermissionStatus _parsePermissionStatus(String? raw) =>
       switch (raw) {
-        'granted'    => PermissionStatus.granted,
-        'revoked'    => PermissionStatus.revoked,
-        'restricted' => PermissionStatus.restricted,
-        _            => PermissionStatus.denied,
+        'granted'        => PermissionStatus.granted,
+        'revoked'        => PermissionStatus.revoked,
+        'restricted'     => PermissionStatus.restricted,
+        'not_applicable' => PermissionStatus.restricted, // iOS: App Intents always available
+        _                => PermissionStatus.denied,
       };
 }

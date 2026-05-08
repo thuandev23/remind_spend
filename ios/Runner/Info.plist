@@ -47,5 +47,9 @@
 	<true/>
 	<key>ShortcutInstallURL</key>
 	<string></string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.example.remind_spend.bgPull</string>
+	</array>
 </dict>
 </plist>

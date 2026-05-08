@@ -84,7 +84,9 @@ class _StartupRouterState extends State<_StartupRouter> {
     final status = await BridgeService.checkPermissionStatus();
     if (!mounted) return;
     setState(() {
-      _permissionGranted = status == PermissionStatus.granted;
+      // restricted = iOS (App Intents always available, no listener permission needed)
+      _permissionGranted = status == PermissionStatus.granted ||
+          status == PermissionStatus.restricted;
     });
   }
 

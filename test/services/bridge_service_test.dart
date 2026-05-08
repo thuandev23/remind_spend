@@ -104,6 +104,12 @@ void main() {
           PermissionStatus.restricted);
     });
 
+    test('not_applicable string maps to PermissionStatus.restricted (iOS)', () async {
+      mockStatus('not_applicable');
+      expect(await BridgeService.checkPermissionStatus(),
+          PermissionStatus.restricted);
+    });
+
     test('unknown string falls back to PermissionStatus.denied', () async {
       mockStatus('unknown_value');
       expect(
