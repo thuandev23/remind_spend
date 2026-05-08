@@ -61,6 +61,9 @@ final class IOSBridgePlugin: NSObject {
         case "checkBatteryOptimization":
             result(true)   // iOS has no battery-kill mechanism like MIUI/OneUI
 
+        case "mockTransaction":
+            handleMockTransaction(result: result)
+
         case "requestBatteryOptimizationWhitelist":
             result(nil)    // no-op
 
@@ -103,6 +106,25 @@ final class IOSBridgePlugin: NSObject {
                     ))
                 }
             }
+        }
+    }
+
+    private func handleMockTransaction(result: @escaping FlutterResult) {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let mock = TransactionPayload(
+            id: "mock-\(UUID().uuidString.prefix(8))",
+            bankId: "VCB",
+            amountVnd: 1234567,
+            sign: "credit",
+            rawContent: "VCB: +1,234,567VND; SD: 10,000,000VND; Noi dung: Test thong bao tu Antigravity",
+            timestampMs: now,
+            createdAt: now
+        )
+        do {
+            try keychainQueue.enqueue(mock)
+            result(true)
+        } catch {
+            result(FlutterError(code: "MOCK_ERROR", message: error.localizedDescription, details: nil))
         }
     }
 
