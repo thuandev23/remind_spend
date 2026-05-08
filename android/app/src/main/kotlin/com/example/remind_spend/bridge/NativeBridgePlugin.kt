@@ -15,7 +15,7 @@ import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.RegexConfigEntry
 import com.example.remind_spend.security.SecurityManager
-import org.json.JSONArray
+import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -25,55 +25,70 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
-class NativeBridgePlugin(
-    private val context: Context,
-    methodChannel: MethodChannel,
-    eventChannel: EventChannel
-) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
+class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     companion object {
-        const val METHOD_CHANNEL = "com.example.remind_spend/transaction_bridge"
-        const val EVENT_CHANNEL  = "com.example.remind_spend/permission_status"
-        private const val TAG    = "NativeBridgePlugin"
+        private const val TAG            = "NativeBridgePlugin"
+        private const val METHOD_CHANNEL = "com.example.remind_spend/transaction_bridge"
+        private const val EVENT_CHANNEL  = "com.example.remind_spend/permission_status"
     }
 
-    private val job   = SupervisorJob()
-    private val scope = CoroutineScope(job + Dispatchers.Main)
+    private lateinit var context: Context
+    private lateinit var methodChannel: MethodChannel
+    private lateinit var eventChannel: EventChannel
 
-    private val securityManager by lazy { SecurityManager() }
+    private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // SecurityManager nhận context khi attached
+    private val securityManager by lazy { SecurityManager(context) }
     private val db by lazy {
-        AppDatabase.getInstance(context.applicationContext, securityManager.getDatabasePassphrase())
+        AppDatabase.getInstance(context, securityManager.getDatabasePassphrase())
     }
 
+    private var eventSink: EventChannel.EventSink? = null
     private var permissionObserver: ContentObserver? = null
 
-    init {
+    // ── FlutterPlugin ─────────────────────────────────────────────────────────
+
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        context = binding.applicationContext
+
+        methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL)
         methodChannel.setMethodCallHandler(this)
+
+        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL)
         eventChannel.setStreamHandler(this)
     }
 
-    // ── MethodChannel ────────────────────────────────────────────────────────
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        methodChannel.setMethodCallHandler(null)
+        eventChannel.setStreamHandler(null)
+        pluginScope.cancel()
+    }
+
+    // ── MethodChannel ─────────────────────────────────────────────────────────
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "getAndClearQueue"                 -> handleGetAndClearQueue(result)
-            "checkPermissionStatus"            -> result.success(permissionStatus())
-            "requestPermission"                -> handleRequestPermission(result)
-            "getManufacturerInfo"              -> handleGetManufacturerInfo(result)
-            "checkBatteryOptimization"         -> result.success(isBatteryOptimizationIgnored())
+            "getAndClearQueue"                  -> handleGetAndClearQueue(result)
+            "checkPermissionStatus"             -> result.success(permissionStatus())
+            "requestPermission"                 -> handleRequestPermission(result)
+            "getManufacturerInfo"               -> handleGetManufacturerInfo(result)
+            "checkBatteryOptimization"          -> handleCheckBatteryOptimization(result)
             "requestBatteryOptimizationWhitelist" -> handleRequestBatteryWhitelist(result)
-            "clearIdempotencyCache"            -> handleClearIdempotencyCache(result)
-            "updateRegexConfig"                -> handleUpdateRegexConfig(call, result)
-            else                               -> result.notImplemented()
+            "updateRegexConfig"                 -> handleUpdateRegexConfig(call, result)
+            "clearIdempotencyCache"             -> handleClearIdempotencyCache(result)
+            else                                -> result.notImplemented()
         }
     }
 
     private fun handleGetAndClearQueue(result: MethodChannel.Result) {
-        scope.launch {
+        pluginScope.launch {
             runCatching {
-                val items = withContext(Dispatchers.IO) { db.pendingTransactionDao().dequeueAll() }
-                items.map { tx ->
+                val txs = db.pendingTransactionDao().dequeueAll()
+                txs.map { tx ->
                     mapOf(
                         "id"           to tx.id,
                         "package_name" to tx.packageName,
@@ -85,10 +100,12 @@ class NativeBridgePlugin(
                     )
                 }
             }.fold(
-                onSuccess  = { result.success(it) },
+                onSuccess  = { withContext(Dispatchers.Main) { result.success(it) } },
                 onFailure  = { e ->
                     Log.e(TAG, "getAndClearQueue failed", e)
-                    result.error("DB_ERROR", e.message, null)
+                    withContext(Dispatchers.Main) {
+                        result.error("DB_ERROR", e.message, null)
+                    }
                 }
             )
         }
@@ -116,137 +133,121 @@ class NativeBridgePlugin(
             else                                                        -> "stock"
         }
         result.success(mapOf(
-            "manufacturer" to Build.MANUFACTURER,
+            "type"         to type,
+            "manufacturer" to manufacturer,
             "model"        to Build.MODEL,
-            "type"         to type
+            "sdk_int"      to Build.VERSION.SDK_INT
         ))
     }
 
-    private fun isBatteryOptimizationIgnored(): Boolean {
+    private fun handleCheckBatteryOptimization(result: MethodChannel.Result) {
         val pm = context.getSystemService(PowerManager::class.java)
-        return pm.isIgnoringBatteryOptimizations(context.packageName)
+        result.success(pm.isIgnoringBatteryOptimizations(context.packageName))
     }
 
     private fun handleRequestBatteryWhitelist(result: MethodChannel.Result) {
         runCatching {
             context.startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:${context.packageName}")
+                ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
             )
-            result.success(null)
+            result.success(true)
         }.onFailure { e ->
-            result.error("SETTINGS_ERROR", e.message, null)
-        }
-    }
-
-    private fun handleClearIdempotencyCache(result: MethodChannel.Result) {
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { db.idempotencyCacheDao().purgeExpired(0L) }
-            }.fold(
-                onSuccess  = { result.success(null) },
-                onFailure  = { e ->
-                    Log.e(TAG, "clearIdempotencyCache failed", e)
-                    result.error("DB_ERROR", e.message, null)
-                }
-            )
+            result.error("BATTERY_ERROR", e.message, null)
         }
     }
 
     private fun handleUpdateRegexConfig(call: MethodCall, result: MethodChannel.Result) {
-        val rulesRaw = call.arguments as? List<*> ?: run {
-            result.error("INVALID_ARGS", "Expected list of rule maps", null)
-            return
-        }
-        scope.launch {
+        pluginScope.launch {
             runCatching {
-                val rules = rulesRaw.mapNotNull { item ->
-                    val map = item as? Map<*, *> ?: return@mapNotNull null
-                    val bankId = map["bank_id"] as? String ?: return@mapNotNull null
-                    val packageNames = (map["package_names"] as? List<*>)
-                        ?.mapNotNull { it as? String } ?: emptyList()
-                    val patterns = (map["patterns"] as? List<*>)
-                        ?.mapNotNull { it as? String } ?: emptyList()
-                    val amountGroup = (map["amount_group"] as? Int) ?: 1
-                    val sign = map["sign"] as? String ?: "debit"
-                    BankRule(bankId, packageNames, patterns, amountGroup, sign)
+                val rawList = call.arguments as? List<*> ?: emptyList<Any>()
+                val rules = rawList.mapNotNull { item ->
+                    val map        = item as? Map<*, *> ?: return@mapNotNull null
+                    val bankId     = map["bank_id"] as? String ?: return@mapNotNull null
+                    val pkgs       = (map["package_names"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                    val patterns   = (map["patterns"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                    val amtGroup   = (map["amount_group"] as? Int) ?: 1
+                    val sign       = map["sign"] as? String ?: "debit"
+                    BankRule(bankId, pkgs, patterns, amtGroup, sign)
                 }
                 RegexConfigLoader.updateActiveRules(rules)
                 val nowMs = System.currentTimeMillis()
-                withContext(Dispatchers.IO) {
-                    for (rule in rules) {
-                        db.regexConfigDao().upsert(
-                            RegexConfigEntry(
-                                bankId = rule.bankId,
-                                packageNamesJson = JSONArray(rule.packageNames).toString(),
-                                patternsJson = JSONArray(rule.patterns).toString(),
-                                amountGroup = rule.amountGroup,
-                                sign = rule.sign,
-                                version = (nowMs / 1000L).toInt(),
-                                fetchedAt = nowMs
-                            )
+                for (rule in rules) {
+                    db.regexConfigDao().upsert(
+                        RegexConfigEntry(
+                            bankId           = rule.bankId,
+                            packageNamesJson = JSONArray(rule.packageNames).toString(),
+                            patternsJson     = JSONArray(rule.patterns).toString(),
+                            amountGroup      = rule.amountGroup,
+                            sign             = rule.sign,
+                            version          = (nowMs / 1000L).toInt(),
+                            fetchedAt        = nowMs
                         )
-                    }
+                    )
                 }
             }.fold(
-                onSuccess  = { result.success(null) },
+                onSuccess  = { withContext(Dispatchers.Main) { result.success(null) } },
                 onFailure  = { e ->
                     Log.e(TAG, "updateRegexConfig failed", e)
-                    result.error("CONFIG_ERROR", e.message, null)
+                    withContext(Dispatchers.Main) {
+                        result.error("CONFIG_ERROR", e.message, null)
+                    }
                 }
             )
+        }
+    }
+
+    private fun handleClearIdempotencyCache(result: MethodChannel.Result) {
+        pluginScope.launch {
+            db.idempotencyCacheDao().purgeExpired(Long.MAX_VALUE)
+            withContext(Dispatchers.Main) { result.success(null) }
         }
     }
 
     // ── EventChannel ─────────────────────────────────────────────────────────
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+        eventSink = events
         events.success(permissionStatus())
 
         val handler = Handler(Looper.getMainLooper())
-        permissionObserver = object : ContentObserver(handler) {
+        val obs = object : ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 handler.post { events.success(permissionStatus()) }
             }
         }
+        permissionObserver = obs
         context.contentResolver.registerContentObserver(
             Settings.Secure.getUriFor("enabled_notification_listeners"),
             false,
-            permissionObserver!!
+            obs
         )
     }
 
     override fun onCancel(arguments: Any?) {
         val obs = permissionObserver
-        if (obs != null) context.contentResolver.unregisterContentObserver(obs)
-        permissionObserver = null
+        if (obs != null) {
+            context.contentResolver.unregisterContentObserver(obs)
+            permissionObserver = null
+        }
+        eventSink = null
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-    fun destroy() {
-        onCancel(null)
-        job.cancel()
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun permissionStatus(): String {
-        val listeners = Settings.Secure.getString(
-            context.contentResolver,
-            "enabled_notification_listeners"
-        ) ?: ""
-        return if (listeners.contains(context.packageName)) "granted" else "denied"
+        val flat = Settings.Secure.getString(
+            context.contentResolver, "enabled_notification_listeners"
+        ) ?: return "denied"
+        return if (flat.contains(context.packageName)) "granted" else "denied"
     }
 
-    private fun getSystemProperty(key: String): String {
-        return try {
-            Runtime.getRuntime().exec(arrayOf("getprop", key))
-                .inputStream.bufferedReader().readText().trim()
-        } catch (e: Exception) {
-            ""
-        }
-    }
+    private fun getSystemProperty(key: String): String =
+        runCatching {
+            val clazz  = Class.forName("android.os.SystemProperties")
+            val method = clazz.getMethod("get", String::class.java)
+            (method.invoke(null, key) as? String) ?: ""
+        }.getOrDefault("")
 }

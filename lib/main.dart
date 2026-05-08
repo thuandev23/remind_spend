@@ -3,7 +3,10 @@ import 'package:workmanager/workmanager.dart';
 
 import 'db/app_db.dart';
 import 'repositories/transaction_repository.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/transaction_list_screen.dart';
 import 'services/background_pull_worker.dart';
+import 'services/bridge_service.dart';
 import 'services/pull_service.dart';
 import 'services/remote_config_service.dart';
 
@@ -14,37 +17,113 @@ void main() async {
   final repo = TransactionRepository(db);
   final pullService = PullService(repo)..start();
 
-  // Fire-and-forget: resolve regex config and push to native
+  // Fire-and-forget: resolve regex config và push xuống native
   RemoteConfigService(db).resolve();
 
   await Workmanager().initialize(callbackDispatcher);
   await scheduleBackgroundPull();
 
-  runApp(MyApp(pullService: pullService));
+  runApp(MyApp(repo: repo, pullService: pullService));
 }
 
 class MyApp extends StatelessWidget {
+  final TransactionRepository repo;
   final PullService pullService;
 
-  const MyApp({super.key, required this.pullService});
+  const MyApp({super.key, required this.repo, required this.pullService});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       title: 'Remind Spend',
-      home: _PlaceholderHome(),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        fontFamily: 'SF Pro Display', // iOS-style, fallback sang system font
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1A1A1A),
+          brightness: Brightness.light,
+        ),
+      ),
+      // Màn hình khởi động check permission trước khi quyết định route
+      home: _StartupRouter(repo: repo, pullService: pullService),
     );
   }
 }
 
-// Placeholder UI — Sprint 5+ will replace this with the real transaction list.
-class _PlaceholderHome extends StatelessWidget {
-  const _PlaceholderHome();
+// ─────────────────────────────────────────────────────────────────────────────
+// _StartupRouter
+//
+// Check permission một lần duy nhất khi app cold start.
+// → Granted: TransactionListScreen
+// → Not granted: OnboardingScreen
+//
+// Không block main() — check async sau khi UI đã render.
+// ─────────────────────────────────────────────────────────────────────────────
+class _StartupRouter extends StatefulWidget {
+  final TransactionRepository repo;
+  final PullService pullService;
+
+  const _StartupRouter({required this.repo, required this.pullService});
+
+  @override
+  State<_StartupRouter> createState() => _StartupRouterState();
+}
+
+class _StartupRouterState extends State<_StartupRouter> {
+  // null = đang check, true = granted, false = cần onboarding
+  bool? _permissionGranted;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermission();
+  }
+
+  Future<void> _checkPermission() async {
+    final status = await BridgeService.checkPermissionStatus();
+    if (!mounted) return;
+    setState(() {
+      _permissionGranted = status == PermissionStatus.granted;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Remind Spend')),
+    // Splash đơn giản trong khi check
+    if (_permissionGranted == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF7F7F5),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Remind Spend',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_permissionGranted!) {
+      return TransactionListScreen(
+        repo: widget.repo,
+        pullService: widget.pullService,
+      );
+    }
+
+    return OnboardingScreen(
+      onComplete: () => TransactionListScreen(
+        repo: widget.repo,
+        pullService: widget.pullService,
+      ),
     );
   }
 }

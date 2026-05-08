@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.io.File
 
 class BankNotificationListener : NotificationListenerService() {
 
@@ -23,18 +24,30 @@ class BankNotificationListener : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val securityManager by lazy { SecurityManager() }
+    // SecurityManager nhận context — không dùng object singleton
+    private val securityManager by lazy { SecurityManager(applicationContext) }
+
     private val db by lazy {
-        AppDatabase.getInstance(applicationContext, securityManager.getDatabasePassphrase())
+        val passphrase = securityManager.getDatabasePassphrase()
+        try {
+            AppDatabase.getInstance(applicationContext, passphrase)
+        } catch (e: Exception) {
+            // Nếu DB corrupt (do bug cũ passphrase thay đổi) → xóa và tạo lại
+            Log.e(TAG, "DB open failed, wiping and recreating: ${e.message}")
+            wipeDatabase()
+            AppDatabase.getInstance(applicationContext, passphrase)
+        }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        Log.i(TAG, "Listener connected")
         serviceScope.launch {
             runCatching {
                 RegexConfigLoader.updateFromConfig(db)
             }.onFailure { e ->
                 Log.w(TAG, "Config load failed on connect: $e")
+                // Không crash — tiếp tục dùng hardcoded fallback
             }
         }
     }
@@ -52,13 +65,14 @@ class BankNotificationListener : NotificationListenerService() {
             return
         }
 
-        val idempotencyKey = NotificationProcessor.buildIdempotencyKey(packageName, amount, sbn.postTime)
+        val idempotencyKey = NotificationProcessor.buildIdempotencyKey(
+            packageName, amount, sbn.postTime
+        )
 
         serviceScope.launch {
             runCatching {
                 val nowMs = System.currentTimeMillis()
 
-                // Purge stale entries before checking — keeps table lean
                 db.idempotencyCacheDao().purgeExpired(nowMs)
 
                 if (db.idempotencyCacheDao().exists(idempotencyKey, nowMs) > 0L) {
@@ -105,10 +119,19 @@ class BankNotificationListener : NotificationListenerService() {
         extras ?: return ""
         return buildString {
             extras.getCharSequence("android.title")?.let { append(it); append(" ") }
-            // Prefer bigText (expanded) over text (collapsed) for richer content
             (extras.getCharSequence("android.bigText")
                 ?: extras.getCharSequence("android.text"))
                 ?.let { append(it) }
         }.trim()
+    }
+
+    // Xóa DB file bị corrupt — chỉ dùng khi open fail
+    // Data trong queue bị mất, nhưng không crash app
+    private fun wipeDatabase() {
+        AppDatabase.destroyInstance()
+        val dbFile = applicationContext.getDatabasePath("remind_spend.db")
+        listOf(dbFile, File("${dbFile.path}-shm"), File("${dbFile.path}-wal"))
+            .forEach { it.delete() }
+        Log.w(TAG, "Database wiped due to open failure")
     }
 }
