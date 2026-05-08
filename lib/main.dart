@@ -9,6 +9,7 @@ import 'services/background_pull_worker.dart';
 import 'services/bridge_service.dart';
 import 'services/pull_service.dart';
 import 'services/remote_config_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,12 +83,23 @@ class _StartupRouterState extends State<_StartupRouter> {
 
   Future<void> _checkPermission() async {
     final status = await BridgeService.checkPermissionStatus();
+    final mfr = await BridgeService.getManufacturerInfo();
+    
     if (!mounted) return;
-    setState(() {
-      // restricted = iOS (App Intents always available, no listener permission needed)
-      _permissionGranted = status == PermissionStatus.granted ||
-          status == PermissionStatus.restricted;
-    });
+
+    if (mfr.type == ManufacturerType.ios) {
+      // iOS: check if user completed the shortcut setup onboarding
+      const storage = FlutterSecureStorage();
+      final setupDone = await storage.read(key: 'ios_setup_complete');
+      setState(() {
+        _permissionGranted = setupDone == 'true';
+      });
+    } else {
+      // Android: check system notification listener permission
+      setState(() {
+        _permissionGranted = status == PermissionStatus.granted;
+      });
+    }
   }
 
   @override

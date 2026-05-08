@@ -4,7 +4,7 @@ import '../models/pending_transaction.dart';
 
 enum PermissionStatus { granted, denied, revoked, restricted }
 
-enum ManufacturerType { stock, miui, oneui, coloros }
+enum ManufacturerType { stock, miui, oneui, coloros, ios }
 
 class ManufacturerInfo {
   final String manufacturer;
@@ -88,6 +88,7 @@ class BridgeService {
         'miui'    => ManufacturerType.miui,
         'oneui'   => ManufacturerType.oneui,
         'coloros' => ManufacturerType.coloros,
+        'ios'     => ManufacturerType.ios,
         _         => ManufacturerType.stock,
       };
       return ManufacturerInfo(
@@ -146,6 +147,16 @@ class BridgeService {
   static Future<void> clearIdempotencyCache() async {
     try {
       await _channel.invokeMethod<void>('clearIdempotencyCache');
+    } on MissingPluginException {
+      return;
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
+  static Future<void> mockTransaction() async {
+    try {
+      await _channel.invokeMethod<void>('mockTransaction');
     } on MissingPluginException {
       return;
     } on PlatformException catch (e) {

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/bridge_service.dart';
 import 'transaction_list_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnboardingScreen
@@ -61,6 +63,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       _loading = false;
       if (status == PermissionStatus.granted) {
         _step = battery ? 2 : 1;
+      } else if (mfr.type == ManufacturerType.ios) {
+        _step = 0; // iOS starts at Shortcut Setup
       } else {
         _step = 0;
       }
@@ -122,7 +126,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               const SizedBox(height: 40),
               _buildStepIndicator(),
               const SizedBox(height: 40),
-              Expanded(child: _buildCurrentStep()),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: _buildCurrentStep(),
+                ),
+              ),
             ],
           ),
         ),
@@ -177,7 +186,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   Widget _buildCurrentStep() {
     return switch (_step) {
-      0 => _NotificationStep(onGrant: _onGrantNotification),
+      0 => _mfrInfo?.type == ManufacturerType.ios
+          ? _IosShortcutStep(
+              onGrant: _onGrantNotification,
+              onVerified: _navigateToDone,
+            )
+          : _NotificationStep(onGrant: _onGrantNotification),
       1 => _BatteryStep(
           mfrInfo: _mfrInfo,
           onGrant: _onGrantBattery,
@@ -215,7 +229,7 @@ class _NotificationStep extends StatelessWidget {
           icon: Icons.phone_android,
           text: 'Chỉ đọc thông báo ngân hàng',
         ),
-        const Spacer(),
+        const SizedBox(height: 32),
         _PrimaryButton(
           label: 'Cấp quyền truy cập',
           onTap: onGrant,
@@ -225,6 +239,165 @@ class _NotificationStep extends StatelessWidget {
           'Chọn "Remind Spend" trong danh sách và bật công tắc.',
           style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
           textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Step: iOS Shortcut Setup ────────────────────────────────────────────────
+class _IosShortcutStep extends StatefulWidget {
+  final VoidCallback onGrant;
+  final VoidCallback onVerified;
+
+  const _IosShortcutStep({required this.onGrant, required this.onVerified});
+
+  @override
+  State<_IosShortcutStep> createState() => _IosShortcutStepState();
+}
+
+class _IosShortcutStepState extends State<_IosShortcutStep> {
+  bool _isManual = false;
+  bool _verifying = false;
+
+  Future<void> _checkConnection() async {
+    setState(() => _verifying = true);
+    if (kDebugMode) await BridgeService.mockTransaction();
+    final items = await BridgeService.getAndClearQueue();
+    if (!mounted) return;
+    
+    if (items.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Kết nối thành công!'), backgroundColor: Colors.green),
+      );
+      // Save setup completion flag for iOS
+      const storage = FlutterSecureStorage();
+      await storage.write(key: 'ios_setup_complete', value: 'true');
+      
+      widget.onVerified();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ Chưa nhận được dữ liệu. Hãy thử chạy phím tắt trước.'), backgroundColor: Colors.red),
+      );
+    }
+    setState(() => _verifying = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StepCard(
+          icon: _isManual ? Icons.menu_book_outlined : Icons.auto_fix_high_outlined,
+          title: _isManual ? 'Hướng dẫn thủ công' : 'Thiết lập iOS Shortcuts',
+          body: _isManual 
+            ? 'Nếu cách tự động không hoạt động, hãy làm theo các bước chi tiết sau.'
+            : 'iOS không cho phép đọc thông báo trực tiếp. Bạn cần phím tắt để gửi dữ liệu vào app.',
+        ),
+        const SizedBox(height: 16),
+        if (!_isManual) ...[
+          const _GuideRow(number: '1', text: 'Tải phím tắt mẫu bằng nút bên dưới.'),
+          const SizedBox(height: 12),
+          const _GuideRow(number: '2', text: 'Vào app Phím tắt -> Tự động hóa -> Thêm giao dịch.'),
+          const SizedBox(height: 12),
+          const _GuideRow(number: '3', text: 'Bấm nút "Kiểm tra kết nối" để hoàn tất.'),
+        ] else ...[
+          const _GuideRow(number: '1', text: 'Mở app Phím tắt -> Tạo phím tắt mới tên "LogTransaction".'),
+          const SizedBox(height: 12),
+          const _GuideRow(number: '2', text: 'Thêm tác vụ "Run App Intent" của Remind Spend.'),
+          const SizedBox(height: 12),
+          const _GuideRow(number: '3', text: 'Thiết lập Automation chạy phím tắt này khi có SMS.'),
+        ],
+        const SizedBox(height: 32),
+        if (!_isManual)
+          _PrimaryButton(
+            label: 'Tải Phím tắt mẫu',
+            onTap: widget.onGrant,
+          )
+        else
+          _PrimaryButton(
+            label: 'Mở app Phím tắt',
+            onTap: widget.onGrant,
+          ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton(
+            onPressed: _verifying ? null : _checkConnection,
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF1A1A1A)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: _verifying 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Kiểm tra kết nối', style: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isManual = !_isManual),
+            child: Text(
+              _isManual ? 'Quay lại cách tự động' : 'Xem hướng dẫn thủ công',
+              style: const TextStyle(color: Color(0xFF8A8A8A)),
+            ),
+          ),
+        ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: () async {
+                await BridgeService.mockTransaction();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('🧪 Mock transaction injected')),
+                  );
+                }
+              },
+              child: const Text('[DEBUG] Inject mock transaction',
+                  style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _GuideRow extends StatelessWidget {
+  final String number;
+  final String text;
+
+  const _GuideRow({required this.number, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF3A3A3A), height: 1.4),
+          ),
         ),
       ],
     );
@@ -299,7 +472,7 @@ class _BatteryStep extends StatelessWidget {
             ],
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 32),
         _PrimaryButton(
           label: 'Mở cài đặt pin',
           onTap: onGrant,

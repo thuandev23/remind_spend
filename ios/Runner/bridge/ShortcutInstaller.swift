@@ -15,13 +15,16 @@ enum ShortcutInstaller {
             return URL(string: "shortcuts://")!
         }
 
+        // If it's an iCloud link, open it directly so iOS shows the "Add Shortcut" UI.
+        if hosted.contains("icloud.com/shortcuts") {
+            return URL(string: hosted)!
+        }
+
         var components = URLComponents(string: "shortcuts://import-workflow")!
         components.queryItems = [
             URLQueryItem(name: "url",  value: hosted),
             URLQueryItem(name: "name", value: "LogTransaction")
         ]
-        // URLComponents.url is non-nil when the base URL is valid and query
-        // items don't contain characters that can't be percent-encoded.
         return components.url ?? URL(string: "shortcuts://")!
     }
 }

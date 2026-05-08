@@ -21,6 +21,7 @@
 		71E8288D2FADD14700CFDABB /* TransactionPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828842FADD10600CFDABB /* TransactionPayload.swift */; };
 		71E828952FADD20000CFDABB /* BankRegexParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828962FADD20000CFDABB /* BankRegexParserTests.swift */; };
 		71E828972FADD20000CFDABB /* KeychainQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E828982FADD20000CFDABB /* KeychainQueueTests.swift */; };
+		90D1B8D6FF71484E8AF767D7 /* LogTransactionIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2859A5DC328E4FA6B043D9D2 /* LogTransactionIntentTests.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		918DD708A76AC33E100AEB1E /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B20754F0DCDA92D6E8A91B4 /* Pods_Runner.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -91,6 +92,7 @@
 		71E8288E2FADD17100CFDABB /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		71E828962FADD20000CFDABB /* BankRegexParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankRegexParserTests.swift; sourceTree = "<group>"; };
 		71E828982FADD20000CFDABB /* KeychainQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainQueueTests.swift; sourceTree = "<group>"; };
+		2859A5DC328E4FA6B043D9D2 /* LogTransactionIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTransactionIntentTests.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
 				71E828962FADD20000CFDABB /* BankRegexParserTests.swift */,
 				71E828982FADD20000CFDABB /* KeychainQueueTests.swift */,
+				2859A5DC328E4FA6B043D9D2 /* LogTransactionIntentTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -502,6 +505,7 @@
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
 				71E828952FADD20000CFDABB /* BankRegexParserTests.swift in Sources */,
 				71E828972FADD20000CFDABB /* KeychainQueueTests.swift in Sources */,
+				90D1B8D6FF71484E8AF767D7 /* LogTransactionIntentTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
