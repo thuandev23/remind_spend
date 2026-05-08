@@ -26,10 +26,11 @@ object RegexConfigLoader {
             bankId = "vcb",
             packageNames = listOf("com.VCB"),
             patterns = listOf(
-                "GD: ?-([0-9,.]+) ?VND",
+                "GD: ?-?([0-9,.]+) ?VND",
                 "Debit: ?([0-9,.]+) ?VND",
                 "So du TK[^:]*: ?([0-9,.]+) ?VND",
-                "So du: ?([0-9,.]+) ?VND"
+                "So du: ?([0-9,.]+) ?VND",
+                "SDcuoi: ?([0-9,.]+) ?VND"
             ),
             amountGroup = 1,
             sign = "debit"
@@ -38,8 +39,9 @@ object RegexConfigLoader {
             bankId = "mb",
             packageNames = listOf("com.mbmobile"),
             patterns = listOf(
-                "(?:chi|giao dịch)[^0-9]*([0-9,.]+) ?đ",
-                "Số dư: ?([0-9,.]+) ?đ",
+                "chi[^0-9]*([0-9,.]+) ?(?:đ|d)\\b",
+                "giao d[iị]ch[^0-9]*([0-9,.]+) ?(?:đ|d)\\b",
+                "S[oố] d[uư]: ?([0-9,.]+) ?(?:đ|d)\\b",
                 "So du: ?([0-9,.]+)"
             ),
             amountGroup = 1,
@@ -69,8 +71,8 @@ object RegexConfigLoader {
             bankId = "momo",
             packageNames = listOf("com.mservice.momotransfer"),
             patterns = listOf(
-                "(?:chi|thanh toán)[^0-9]*([0-9,.]+)đ",
-                "Bạn đã (?:chi|gửi)[^0-9]*([0-9,.]+)(?:đ|VND)"
+                "(?:chi|thanh to[aá]n)[^0-9]*([0-9,.]+)(?:đ|d)",
+                "B[aạ]n [dđ][aã] (?:chi|g[uử]i)[^0-9]*([0-9,.]+)(?:đ|d|VND)"
             ),
             amountGroup = 1,
             sign = "debit"
@@ -79,7 +81,7 @@ object RegexConfigLoader {
             bankId = "zalopay",
             packageNames = listOf("com.vnpay.zalopay"),
             patterns = listOf(
-                "(?:chi|thanh toán)[^0-9]*([0-9,.]+)(?:đ|VND)"
+                "(?:chi|thanh to[aá]n)[^0-9]*([0-9,.]+)(?:đ|d|VND)"
             ),
             amountGroup = 1,
             sign = "debit"

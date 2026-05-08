@@ -40,6 +40,16 @@
             </intent-filter>
         </service>
 
+        <!-- Test-only: nhận ADB broadcast để simulate bank notification (yêu cầu android.permission.DUMP) -->
+        <receiver
+            android:name=".testing.TestNotificationReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.example.remind_spend.TEST_NOTIF" />
+            </intent-filter>
+        </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
