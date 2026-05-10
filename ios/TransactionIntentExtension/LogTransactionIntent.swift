@@ -1,6 +1,7 @@
 import AppIntents
 import CryptoKit
 import Foundation
+import UserNotifications
 
 // Requires iOS 16+ — enforce MinimumOSVersion = 16.0 in the extension Info.plist.
 // This intent is invoked by a Shortcuts Personal Automation triggered on SMS
@@ -38,7 +39,32 @@ struct LogTransactionIntent: AppIntent {
         // KeychainQueue.shared uses the App Group — both targets must have the
         // group.com.example.remind_spend entitlement.
         try KeychainQueue.shared.enqueue(payload)
+        postLocalNotification(payload: payload, parsed: parsed)
         return .result()
+    }
+
+    // MARK: - Local Notification
+
+    private func postLocalNotification(payload: TransactionPayload, parsed: ParsedTransaction) {
+        let content = UNMutableNotificationContent()
+        content.title = parsed.bankId.uppercased()
+        content.body  = "\(parsed.sign == "debit" ? "-" : "+")\(formatAmount(parsed.amountVnd))đ"
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: payload.id,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    private func formatAmount(_ amount: Int64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = ","
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
     }
 
     // MARK: - Idempotency

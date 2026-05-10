@@ -1,6 +1,8 @@
+import CryptoKit
 import Flutter
 import Foundation
 import UIKit
+import UserNotifications
 
 /// iOS counterpart of Android's NativeBridgePlugin.
 /// Handles the same MethodChannel and EventChannel contracts so the Flutter
@@ -64,6 +66,12 @@ final class IOSBridgePlugin: NSObject {
         case "mockTransaction":
             handleMockTransaction(result: result)
 
+        case "simulateBankNotification":
+            handleSimulateBankNotification(call: call, result: result)
+
+        case "requestLocalNotificationPermission":
+            handleRequestLocalNotificationPermission(result: result)
+
         case "requestBatteryOptimizationWhitelist":
             result(nil)    // no-op
 
@@ -125,6 +133,56 @@ final class IOSBridgePlugin: NSObject {
             result(true)
         } catch {
             result(FlutterError(code: "MOCK_ERROR", message: error.localizedDescription, details: nil))
+        }
+    }
+
+    // Mirrors LogTransactionIntent.perform() exactly — runs smsText through
+    // BankRegexParser, builds payload with real idempotency key, enqueues to
+    // KeychainQueue. Use this for debug testing instead of mockTransaction.
+    private func handleSimulateBankNotification(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let smsText = call.arguments as? String, !smsText.isEmpty else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "smsText must be a non-empty string", details: nil))
+            return
+        }
+        guard let parsed = BankRegexParser.parse(text: smsText) else {
+            result(FlutterError(code: "PARSE_FAILED", message: "SMS did not match any known bank pattern", details: nil))
+            return
+        }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1_000)
+        let payload = TransactionPayload(
+            id: idempotencyKey(bankId: parsed.bankId, amount: parsed.amountVnd, timestampMs: nowMs),
+            bankId: parsed.bankId,
+            amountVnd: parsed.amountVnd,
+            sign: parsed.sign,
+            rawContent: smsText,
+            timestampMs: nowMs,
+            createdAt: nowMs
+        )
+        do {
+            try keychainQueue.enqueue(payload)
+            result(true)
+        } catch {
+            result(FlutterError(code: "KEYCHAIN_ERROR", message: error.localizedDescription, details: nil))
+        }
+    }
+
+    // SHA256(bankId_amount_⌊timestampMs/5000⌋) — mirrors Android NotificationProcessor
+    private func idempotencyKey(bankId: String, amount: Int64, timestampMs: Int64) -> String {
+        let window = timestampMs / 5_000
+        let input  = Data("\(bankId)_\(amount)_\(window)".utf8)
+        let digest = SHA256.hash(data: input)
+        return digest.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    private func handleRequestLocalNotificationPermission(result: @escaping FlutterResult) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    result(FlutterError(code: "NOTIF_ERROR", message: error.localizedDescription, details: nil))
+                } else {
+                    result(granted)
+                }
+            }
         }
     }
 

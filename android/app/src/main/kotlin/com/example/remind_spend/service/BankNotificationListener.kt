@@ -8,6 +8,7 @@ import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.IdempotencyEntry
 import com.example.remind_spend.db.PendingTransaction
+import com.example.remind_spend.notification.LocalNotificationHelper
 import com.example.remind_spend.security.SecurityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,7 @@ class BankNotificationListener : NotificationListenerService() {
                 )
                 if (rowId != -1L) {
                     Log.i(TAG, "Enqueued: ${rule.bankId} ${amount}đ [${rule.sign}]")
+                    LocalNotificationHelper.show(applicationContext, rule.bankId, amount, rule.sign)
                 }
             }.onFailure { e ->
                 Log.e(TAG, "Failed to process notification", e)

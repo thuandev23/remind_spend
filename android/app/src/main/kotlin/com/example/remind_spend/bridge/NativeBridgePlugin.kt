@@ -1,5 +1,8 @@
 package com.example.remind_spend.bridge
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.content.Context
 import android.content.Intent
@@ -10,15 +13,21 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.remind_spend.config.BankRule
 import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.RegexConfigEntry
+import com.example.remind_spend.notification.LocalNotificationHelper
 import com.example.remind_spend.security.SecurityManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,12 +36,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
-class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
+class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ActivityAware {
 
     companion object {
-        private const val TAG            = "NativeBridgePlugin"
-        private const val METHOD_CHANNEL = "com.example.remind_spend/transaction_bridge"
-        private const val EVENT_CHANNEL  = "com.example.remind_spend/permission_status"
+        private const val TAG                     = "NativeBridgePlugin"
+        private const val METHOD_CHANNEL          = "com.example.remind_spend/transaction_bridge"
+        private const val EVENT_CHANNEL           = "com.example.remind_spend/permission_status"
+        private const val REQUEST_CODE_POST_NOTIF = 1001
     }
 
     private lateinit var context: Context
@@ -40,6 +50,23 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
     private lateinit var eventChannel: EventChannel
 
     private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var activity: Activity? = null
+    private var activityBinding: ActivityPluginBinding? = null
+    private var pendingPermissionResult: MethodChannel.Result? = null
+
+    private val permissionsResultListener =
+        PluginRegistry.RequestPermissionsResultListener { requestCode, _, grantResults ->
+            if (requestCode == REQUEST_CODE_POST_NOTIF) {
+                val granted = grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                pendingPermissionResult?.success(granted)
+                pendingPermissionResult = null
+                true
+            } else {
+                false
+            }
+        }
 
     // SecurityManager nhận context khi attached
     private val securityManager by lazy { SecurityManager(context) }
@@ -54,6 +81,7 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        LocalNotificationHelper.createChannel(context)
 
         methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL)
         methodChannel.setMethodCallHandler(this)
@@ -72,15 +100,16 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "getAndClearQueue"                  -> handleGetAndClearQueue(result)
-            "checkPermissionStatus"             -> result.success(permissionStatus())
-            "requestPermission"                 -> handleRequestPermission(result)
-            "getManufacturerInfo"               -> handleGetManufacturerInfo(result)
-            "checkBatteryOptimization"          -> handleCheckBatteryOptimization(result)
-            "requestBatteryOptimizationWhitelist" -> handleRequestBatteryWhitelist(result)
-            "updateRegexConfig"                 -> handleUpdateRegexConfig(call, result)
-            "clearIdempotencyCache"             -> handleClearIdempotencyCache(result)
-            else                                -> result.notImplemented()
+            "getAndClearQueue"                       -> handleGetAndClearQueue(result)
+            "checkPermissionStatus"                  -> result.success(permissionStatus())
+            "requestPermission"                      -> handleRequestPermission(result)
+            "getManufacturerInfo"                    -> handleGetManufacturerInfo(result)
+            "checkBatteryOptimization"               -> handleCheckBatteryOptimization(result)
+            "requestBatteryOptimizationWhitelist"    -> handleRequestBatteryWhitelist(result)
+            "updateRegexConfig"                      -> handleUpdateRegexConfig(call, result)
+            "clearIdempotencyCache"                  -> handleClearIdempotencyCache(result)
+            "requestPostNotificationsPermission"     -> handleRequestPostNotificationsPermission(result)
+            else                                     -> result.notImplemented()
         }
     }
 
@@ -204,6 +233,51 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             db.idempotencyCacheDao().purgeExpired(Long.MAX_VALUE)
             withContext(Dispatchers.Main) { result.success(null) }
         }
+    }
+
+    private fun handleRequestPostNotificationsPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(true)
+            return
+        }
+        val act = activity
+        if (act == null) {
+            result.success(false)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(act, Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED) {
+            result.success(true)
+            return
+        }
+        pendingPermissionResult = result
+        ActivityCompat.requestPermissions(
+            act,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_CODE_POST_NOTIF
+        )
+    }
+
+    // ── ActivityAware ─────────────────────────────────────────────────────────
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        activityBinding = binding
+        binding.addRequestPermissionsResultListener(permissionsResultListener)
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        onDetachedFromActivity()
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        onAttachedToActivity(binding)
+    }
+
+    override fun onDetachedFromActivity() {
+        activityBinding?.removeRequestPermissionsResultListener(permissionsResultListener)
+        activityBinding = null
+        activity = null
     }
 
     // ── EventChannel ─────────────────────────────────────────────────────────

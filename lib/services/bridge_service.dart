@@ -164,6 +164,49 @@ class BridgeService {
     }
   }
 
+  // Android 13+: requests POST_NOTIFICATIONS runtime permission.
+  // Returns true if granted (or not required), false if denied.
+  static Future<bool> requestPostNotificationsPermission() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('requestPostNotificationsPermission');
+      return result ?? true;
+    } on MissingPluginException {
+      return true;
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
+  // iOS only: requests UNUserNotificationCenter authorization.
+  // Returns true if granted, false if denied.
+  static Future<bool> requestLocalNotificationPermission() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('requestLocalNotificationPermission');
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
+  // iOS only: chạy smsText qua BankRegexParser → idempotency key → KeychainQueue.
+  // Mirrors LogTransactionIntent.perform() — dùng để test thay cho ADB broadcast.
+  // Returns false nếu SMS không match pattern nào.
+  static Future<bool> simulateBankNotification(String smsText) async {
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'simulateBankNotification',
+        smsText,
+      );
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
   static PermissionStatus _parsePermissionStatus(String? raw) =>
       switch (raw) {
         'granted'        => PermissionStatus.granted,

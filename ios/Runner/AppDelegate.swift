@@ -27,19 +27,6 @@ import workmanager_apple
             let plugin = IOSBridgePlugin()
             plugin.register(with: controller.binaryMessenger)
             bridgePlugin = plugin
-            
-            // Mock a transaction for testing right now
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
-            let mock = TransactionPayload(
-                id: "init-mock-\(UUID().uuidString.prefix(4))",
-                bankId: "VCB",
-                amountVnd: 500000,
-                sign: "credit",
-                rawContent: "VCB: +500,000VND; Test tu dong khi mo app",
-                timestampMs: now,
-                createdAt: now
-            )
-            try? KeychainQueue.shared.enqueue(mock)
         }
 
         return result

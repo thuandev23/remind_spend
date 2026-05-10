@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../db/app_db.dart';
 import '../repositories/transaction_repository.dart';
@@ -36,6 +39,9 @@ class _TransactionListScreenState extends State<TransactionListScreen>
     _pull = widget.pullService ?? PullService(_repo);
     _pull.start();
     WidgetsBinding.instance.addObserver(this);
+    // Cold start: didChangeAppLifecycleState(resumed) không fire khi app bị kill
+    // và mở lại — cần pull thủ công sau frame đầu tiên.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pull.pull());
   }
 
   @override
@@ -58,7 +64,10 @@ class _TransactionListScreenState extends State<TransactionListScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       final status = await BridgeService.checkPermissionStatus();
-      if (status != PermissionStatus.granted && mounted) {
+      // restricted = iOS "not_applicable" — App Intents always available, no revoke possible.
+      // Only redirect when permission was explicitly denied or revoked by the user.
+      final revoked = status == PermissionStatus.denied || status == PermissionStatus.revoked;
+      if (revoked && mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const OnboardingScreen()),
         );
@@ -354,27 +363,58 @@ class _DebugSheetState extends State<_DebugSheet> {
   ManufacturerInfo? _mfrInfo;
   bool _battery = false;
 
+  final _smsController = TextEditingController(
+    text: 'GD: 250,000 VND tai ATM. So du: 5,000,000VND',
+  );
+  bool _simulating = false;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  @override
+  void dispose() {
+    _smsController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final perm = await BridgeService.checkPermissionStatus();
-    final mfr = await BridgeService.getManufacturerInfo();
-    final bat = await BridgeService.checkBatteryOptimization();
+    final mfr  = await BridgeService.getManufacturerInfo();
+    final bat  = await BridgeService.checkBatteryOptimization();
     if (!mounted) return;
     setState(() {
       _permStatus = perm;
-      _mfrInfo = mfr;
-      _battery = bat;
+      _mfrInfo    = mfr;
+      _battery    = bat;
     });
+  }
+
+  Future<void> _simulate() async {
+    setState(() => _simulating = true);
+    try {
+      final ok = await BridgeService.simulateBankNotification(_smsController.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? '✅ Enqueued — kéo refresh để thấy' : '❌ SMS không match pattern nào'),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ));
+    } on BridgeError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ ${e.message}'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _simulating = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -383,18 +423,10 @@ class _DebugSheetState extends State<_DebugSheet> {
           const Text('Debug Info',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
-          _DebugRow(
-              label: 'Notification permission',
-              value: _permStatus?.name ?? '...'),
-          _DebugRow(
-              label: 'Battery exempt',
-              value: _battery ? '✅ yes' : '⚠️ no'),
-          _DebugRow(
-              label: 'Manufacturer',
-              value: _mfrInfo?.manufacturer ?? '...'),
-          _DebugRow(
-              label: 'ROM type',
-              value: _mfrInfo?.type.name ?? '...'),
+          _DebugRow(label: 'Permission',    value: _permStatus?.name ?? '...'),
+          _DebugRow(label: 'Battery exempt', value: _battery ? '✅ yes' : '⚠️ no'),
+          _DebugRow(label: 'Manufacturer',  value: _mfrInfo?.manufacturer ?? '...'),
+          _DebugRow(label: 'ROM type',      value: _mfrInfo?.type.name ?? '...'),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -410,6 +442,51 @@ class _DebugSheetState extends State<_DebugSheet> {
               child: const Text('Clear idempotency cache'),
             ),
           ),
+          // iOS-only: simulate bank SMS notification (equivalent of ADB broadcast on Android)
+          if (kDebugMode && Platform.isIOS) ...[
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 12),
+            const Text(
+              'Simulate bank notification (iOS)',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Chạy qua BankRegexParser → KeychainQueue.\nTương đương ADB broadcast trên Android.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _smsController,
+              decoration: InputDecoration(
+                labelText: 'SMS text',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              maxLines: 3,
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _simulating ? null : _simulate,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: _simulating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Simulate'),
+              ),
+            ),
+          ],
         ],
       ),
     );
