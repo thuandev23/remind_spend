@@ -77,5 +77,6 @@ class TransactionRepository {
         timestampMs: tx.timestampMs,
         createdAt: tx.createdAt,
         syncedAt: const Value.absent(),
+        rawContent: Value(tx.rawContent),
       );
 }

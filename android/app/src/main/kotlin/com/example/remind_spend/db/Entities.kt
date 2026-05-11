@@ -45,23 +45,22 @@ data class IdempotencyEntry(
     val expiresAt: Long           // epoch ms, TTL 24h → auto-purge
 )
 
-@Entity(tableName = "regex_config_cache")
+@Entity(tableName = "regex_config_cache", primaryKeys = ["bank_id", "sign"])
 data class RegexConfigEntry(
-    @PrimaryKey
     @ColumnInfo(name = "bank_id")
     val bankId: String,
 
+    @ColumnInfo(name = "sign")
+    val sign: String,              // "debit" | "credit" — part of composite PK
+
     @ColumnInfo(name = "package_names_json")
-    val packageNamesJson: String,  // JSON array of Android package names
+    val packageNamesJson: String,
 
     @ColumnInfo(name = "patterns_json")
-    val patternsJson: String,      // JSON array of regex patterns
+    val patternsJson: String,
 
     @ColumnInfo(name = "amount_group")
     val amountGroup: Int = 1,
-
-    @ColumnInfo(name = "sign")
-    val sign: String,              // "debit" | "credit"
 
     @ColumnInfo(name = "version")
     val version: Int,

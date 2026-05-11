@@ -47,9 +47,42 @@
 	<true/>
 	<key>ShortcutInstallURL</key>
 	<string></string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>momo</string>
+		<string>zalopay</string>
+		<string>zalo</string>
+		<string>vietcombank</string>
+		<string>vcbdigibank</string>
+		<string>vcb</string>
+		<string>mbbank</string>
+		<string>mbmobile</string>
+		<string>mb</string>
+		<string>bidvsmartbanking</string>
+		<string>bidv</string>
+		<string>techcombank</string>
+		<string>tcb</string>
+		<string>fastmobile</string>
+		<string>vpbankneo</string>
+		<string>vpbank</string>
+		<string>agribankmobile</string>
+		<string>agribank</string>
+		<string>vba</string>
+		<string>tpbank</string>
+		<string>tpbdigital</string>
+		<string>sacombankpay</string>
+		<string>sacombank</string>
+		<string>acbapp</string>
+		<string>acbonline</string>
+		<string>acb</string>
+		<string>vietinbankipay</string>
+		<string>vietinbank</string>
+		<string>vtb</string>
+	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.example.remind_spend.bgPull</string>
+		<string>com.example.remind_spend.bgRefresh</string>
 	</array>
 </dict>
 </plist>

@@ -21,6 +21,10 @@ final class KeychainQueue {
 
     private let accessGroup: String?
     private let itemKey: String
+    // Fixed service key — must be the same across all targets (app + extension).
+    // Without this, iOS defaults to the calling bundle's ID, so the extension
+    // writes to a different Keychain item than the main app reads from.
+    private static let serviceKey = "com.example.remind_spend.queue"
     private let serialQueue = DispatchQueue(
         label: "com.example.remind_spend.keychain",
         qos: .utility
@@ -47,6 +51,11 @@ final class KeychainQueue {
         }
     }
 
+    /// Reads queue without clearing — for diagnostics only.
+    func peek() throws -> [TransactionPayload] {
+        try serialQueue.sync { try _load() }
+    }
+
     /// Returns all queued payloads and atomically clears the queue.
     /// Returns an empty array (not an error) if the queue is empty.
     func dequeueAll() throws -> [TransactionPayload] {
@@ -62,6 +71,7 @@ final class KeychainQueue {
     private func _load() throws -> [TransactionPayload] {
         var query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceKey,
             kSecAttrAccount as String: itemKey,
             kSecReturnData as String:  true,
             kSecMatchLimit as String:  kSecMatchLimitOne
@@ -72,14 +82,19 @@ final class KeychainQueue {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        NSLog("[KeychainQueue] _load status=\(status) group=\(accessGroup ?? "nil") service=\(Self.serviceKey)")
 
         switch status {
         case errSecSuccess:
             guard let data = result as? Data else { throw KeychainError.invalidData }
-            return try JSONDecoder().decode([TransactionPayload].self, from: data)
+            let items = try JSONDecoder().decode([TransactionPayload].self, from: data)
+            NSLog("[KeychainQueue] _load decoded \(items.count) item(s)")
+            return items
         case errSecItemNotFound:
+            NSLog("[KeychainQueue] _load: item not found (errSecItemNotFound)")
             return []
         default:
+            NSLog("[KeychainQueue] _load: unexpected status \(status)")
             throw KeychainError.unexpectedStatus(status)
         }
     }
@@ -89,6 +104,7 @@ final class KeychainQueue {
 
         var query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.serviceKey,
             kSecAttrAccount as String: itemKey
         ]
         if let group = accessGroup {
@@ -106,6 +122,7 @@ final class KeychainQueue {
             insertQuery.merge(attributes) { _, new in new }
             status = SecItemAdd(insertQuery as CFDictionary, nil)
         }
+        NSLog("[KeychainQueue] _save status=\(status) count=\(items.count) group=\(accessGroup ?? "nil")")
 
         guard status == errSecSuccess else { throw KeychainError.unexpectedStatus(status) }
     }

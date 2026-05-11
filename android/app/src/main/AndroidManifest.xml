@@ -10,7 +10,8 @@
         android:label="remind_spend"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:extractNativeLibs="false">
+        android:extractNativeLibs="false"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
@@ -41,11 +42,10 @@
             </intent-filter>
         </service>
 
-        <!-- Test-only: nhận ADB broadcast để simulate bank notification (yêu cầu android.permission.DUMP) -->
+        <!-- Test-only: nhận ADB broadcast để simulate bank notification -->
         <receiver
             android:name=".testing.TestNotificationReceiver"
-            android:exported="true"
-            android:permission="android.permission.DUMP">
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.example.remind_spend.TEST_NOTIF" />
             </intent-filter>

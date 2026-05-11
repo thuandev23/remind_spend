@@ -20,6 +20,7 @@ import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.RegexConfigEntry
 import com.example.remind_spend.notification.LocalNotificationHelper
+import com.example.remind_spend.notification.TransactionEventBus
 import com.example.remind_spend.security.SecurityManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -42,12 +43,14 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
         private const val TAG                     = "NativeBridgePlugin"
         private const val METHOD_CHANNEL          = "com.example.remind_spend/transaction_bridge"
         private const val EVENT_CHANNEL           = "com.example.remind_spend/permission_status"
+        private const val TX_EVENT_CHANNEL        = "com.example.remind_spend/transaction_events"
         private const val REQUEST_CODE_POST_NOTIF = 1001
     }
 
     private lateinit var context: Context
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
+    private lateinit var txEventChannel: EventChannel
 
     private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -88,12 +91,27 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
 
         eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL)
         eventChannel.setStreamHandler(this)
+
+        txEventChannel = EventChannel(binding.binaryMessenger, TX_EVENT_CHANNEL)
+        txEventChannel.setStreamHandler(txEventStreamHandler)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodChannel.setMethodCallHandler(null)
         eventChannel.setStreamHandler(null)
+        txEventChannel.setStreamHandler(null)
+        TransactionEventBus.setSink(null)
         pluginScope.cancel()
+    }
+
+    // Separate StreamHandler for transaction events — keeps permission StreamHandler clean.
+    private val txEventStreamHandler = object : EventChannel.StreamHandler {
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+            TransactionEventBus.setSink(events)
+        }
+        override fun onCancel(arguments: Any?) {
+            TransactionEventBus.setSink(null)
+        }
     }
 
     // ── MethodChannel ─────────────────────────────────────────────────────────

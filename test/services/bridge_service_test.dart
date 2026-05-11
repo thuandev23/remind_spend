@@ -61,6 +61,12 @@ void main() {
         completes,
       );
     });
+
+    test('detectInstalledFinanceApps returns empty list when plugin absent',
+        () async {
+      final result = await BridgeService.detectInstalledFinanceApps();
+      expect(result, isEmpty);
+    });
   });
 
   group('BridgeService — permission status parsing', () {
@@ -192,6 +198,47 @@ void main() {
       expect(sent['bank_id'], 'vcb');
       expect(sent['sign'], 'debit');
       expect((sent['package_names'] as List).first, 'com.VCB');
+    });
+  });
+
+  group('BridgeService — detectInstalledFinanceApps', () {
+    const channel = MethodChannel('com.example.remind_spend/transaction_bridge');
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('returns parsed list of app ids from native', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'detectInstalledFinanceApps') {
+          return ['momo', 'vcb', 'mb'];
+        }
+        return null;
+      });
+
+      final result = await BridgeService.detectInstalledFinanceApps();
+      expect(result, ['momo', 'vcb', 'mb']);
+    });
+
+    test('returns empty list when native returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => null);
+
+      final result = await BridgeService.detectInstalledFinanceApps();
+      expect(result, isEmpty);
+    });
+
+    test('returns empty list when native returns empty array', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'detectInstalledFinanceApps') return <String>[];
+        return null;
+      });
+
+      final result = await BridgeService.detectInstalledFinanceApps();
+      expect(result, isEmpty);
     });
   });
 

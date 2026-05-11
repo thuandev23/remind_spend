@@ -22,6 +22,9 @@ dependencies:
   # Secure storage — Flutter side
   flutter_secure_storage: ^9.0.0
 
+  # Non-sensitive prefs (cleared on app uninstall, unlike Keychain)
+  shared_preferences: ^2.3.0
+
   # Remote config fetch
   http: ^1.2.2
 

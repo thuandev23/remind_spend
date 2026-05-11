@@ -3,7 +3,7 @@ import CryptoKit
 @testable import Runner
 
 // Tests the business logic that LogTransactionIntent.perform() executes:
-//   1. Parse bank SMS via BankRegexParser
+//   1. Parse bank message (SMS / email / notification) via BankRegexParser
 //   2. Build TransactionPayload with a SHA-256 idempotency key (5-second window)
 //   3. Enqueue into KeychainQueue
 //
@@ -30,11 +30,11 @@ final class LogTransactionIntentTests: XCTestCase {
 
     // MARK: - Happy path
 
-    func test_validVCBSMS_parsesAndEnqueues() throws {
+    func test_validVCBMessage_parsesAndEnqueues() throws {
         let sms = "GD: -150,000 VND tai ATM"
         let ts: Int64 = 1_700_000_000_000
 
-        let enqueued = try simulateIntent(smsText: sms, timestampMs: ts)
+        let enqueued = try simulateIntent(messageText: sms, timestampMs: ts)
         XCTAssertTrue(enqueued)
 
         let items = try queue.dequeueAll()
@@ -45,11 +45,11 @@ final class LogTransactionIntentTests: XCTestCase {
         XCTAssertEqual(items[0].rawContent, sms)
     }
 
-    func test_validMBSMS_parsesAndEnqueues() throws {
+    func test_validMBMessage_parsesAndEnqueues() throws {
         let sms = "Bạn đã chi 300,000 đ cho đơn hàng"
         let ts: Int64 = 1_700_000_100_000
 
-        let enqueued = try simulateIntent(smsText: sms, timestampMs: ts)
+        let enqueued = try simulateIntent(messageText: sms, timestampMs: ts)
         XCTAssertTrue(enqueued)
 
         let items = try queue.dequeueAll()
@@ -57,16 +57,16 @@ final class LogTransactionIntentTests: XCTestCase {
         XCTAssertEqual(items[0].amountVnd, 300_000)
     }
 
-    func test_unknownSMS_doesNotEnqueue() throws {
-        let enqueued = try simulateIntent(smsText: "Mã OTP của bạn là 123456", timestampMs: 1_000)
+    func test_unknownMessage_doesNotEnqueue() throws {
+        let enqueued = try simulateIntent(messageText: "Mã OTP của bạn là 123456", timestampMs: 1_000)
         XCTAssertFalse(enqueued)
 
         let items = try queue.dequeueAll()
         XCTAssertTrue(items.isEmpty)
     }
 
-    func test_emptySMS_doesNotEnqueue() throws {
-        let enqueued = try simulateIntent(smsText: "", timestampMs: 1_000)
+    func test_emptyMessage_doesNotEnqueue() throws {
+        let enqueued = try simulateIntent(messageText: "", timestampMs: 1_000)
         XCTAssertFalse(enqueued)
         XCTAssertTrue(try queue.dequeueAll().isEmpty)
     }
@@ -110,38 +110,38 @@ final class LogTransactionIntentTests: XCTestCase {
 
     // MARK: - Idempotency via queue
 
-    func test_sameSMSTwiceWithinWindow_onlyOneItemStored() throws {
+    func test_sameMessageTwiceWithinWindow_onlyOneItemStored() throws {
         let sms = "GD: -50,000 VND tai ATM"
         let ts: Int64 = 1_700_000_000_000
 
-        try simulateIntent(smsText: sms, timestampMs: ts)
-        try simulateIntent(smsText: sms, timestampMs: ts + 2_000)  // same 5-second window
+        try simulateIntent(messageText: sms, timestampMs: ts)
+        try simulateIntent(messageText: sms, timestampMs: ts + 2_000)  // same 5-second window
 
         let items = try queue.dequeueAll()
         XCTAssertEqual(items.count, 1, "Duplicate SMS within same 5-second window must be deduplicated")
     }
 
-    func test_sameSMSInDifferentWindows_enqueuedTwice() throws {
+    func test_sameMessageInDifferentWindows_enqueuedTwice() throws {
         let sms = "GD: -50,000 VND tai ATM"
 
-        try simulateIntent(smsText: sms, timestampMs: 1_700_000_000_000)
-        try simulateIntent(smsText: sms, timestampMs: 1_700_000_005_000)  // next window
+        try simulateIntent(messageText: sms, timestampMs: 1_700_000_000_000)
+        try simulateIntent(messageText: sms, timestampMs: 1_700_000_005_000)  // next window
 
         let items = try queue.dequeueAll()
-        XCTAssertEqual(items.count, 2, "SMS in different 5-second windows should produce two distinct entries")
+        XCTAssertEqual(items.count, 2, "Messages in different 5-second windows should produce two distinct entries")
     }
 
     // MARK: - Amount integrity
 
     func test_largeAmount_storedExactlyAsInt64() throws {
-        try simulateIntent(smsText: "GD: -10,000,000 VND tai ATM", timestampMs: 1_000_000)
+        try simulateIntent(messageText: "GD: -10,000,000 VND tai ATM", timestampMs: 1_000_000)
 
         let items = try queue.dequeueAll()
         XCTAssertEqual(items[0].amountVnd, 10_000_000)
     }
 
     func test_amountWithDotSeparator_parsedCorrectly() throws {
-        try simulateIntent(smsText: "GD: -1.500.000 VND tai ATM", timestampMs: 1_000_000)
+        try simulateIntent(messageText: "GD: -1.500.000 VND tai ATM", timestampMs: 1_000_000)
 
         let items = try queue.dequeueAll()
         XCTAssertEqual(items[0].amountVnd, 1_500_000)
@@ -153,7 +153,7 @@ final class LogTransactionIntentTests: XCTestCase {
         let sms = "GD: -200,000 VND"
         let ts: Int64 = 1_700_000_000_000
 
-        try simulateIntent(smsText: sms, timestampMs: ts)
+        try simulateIntent(messageText: sms, timestampMs: ts)
         let item = try queue.dequeueAll()[0]
 
         XCTAssertFalse(item.id.isEmpty)
@@ -167,16 +167,16 @@ final class LogTransactionIntentTests: XCTestCase {
 
     // MARK: - Helpers
 
-    // Mirrors LogTransactionIntent.perform() step by step.
+    // Mirrors LogTransactionIntent.perform() step by step — works for SMS, email, or notification text.
     @discardableResult
-    private func simulateIntent(smsText: String, timestampMs: Int64) throws -> Bool {
-        guard let parsed = BankRegexParser.parse(text: smsText) else { return false }
+    private func simulateIntent(messageText: String, timestampMs: Int64) throws -> Bool {
+        guard let parsed = BankRegexParser.parse(text: messageText) else { return false }
         let payload = TransactionPayload(
             id: idempotencyKey(bankId: parsed.bankId, amount: parsed.amountVnd, timestampMs: timestampMs),
             bankId: parsed.bankId,
             amountVnd: parsed.amountVnd,
             sign: parsed.sign,
-            rawContent: smsText,
+            rawContent: messageText,
             timestampMs: timestampMs,
             createdAt: timestampMs
         )

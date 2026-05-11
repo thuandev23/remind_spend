@@ -10,7 +10,7 @@ import net.sqlcipher.database.SupportFactory
 
 @Database(
     entities = [PendingTransaction::class, IdempotencyEntry::class, RegexConfigEntry::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +36,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Drop + recreate regex_config_cache with composite PK (bank_id, sign).
+        // Safe: the table is a pure cache — Tier 3 hardcoded rules always cover cold start.
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("DROP TABLE IF EXISTS regex_config_cache")
+                database.execSQL("""
+                    CREATE TABLE regex_config_cache (
+                        bank_id TEXT NOT NULL,
+                        sign TEXT NOT NULL,
+                        package_names_json TEXT NOT NULL,
+                        patterns_json TEXT NOT NULL,
+                        amount_group INTEGER NOT NULL DEFAULT 1,
+                        version INTEGER NOT NULL,
+                        fetched_at INTEGER NOT NULL,
+                        PRIMARY KEY (bank_id, sign)
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getInstance(context: Context, passphrase: ByteArray): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context, passphrase).also { INSTANCE = it }
@@ -50,7 +70,7 @@ abstract class AppDatabase : RoomDatabase() {
                 "remind_spend.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .enableMultiInstanceInvalidation()
                 // Không dùng fallbackToDestructiveMigration — mất queue = mất data user
                 .build()

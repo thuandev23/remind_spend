@@ -6,6 +6,7 @@ class PendingTransaction {
   final String sign;         // "debit" | "credit"
   final int timestampMs;
   final int createdAt;
+  final String? rawContent;
 
   const PendingTransaction({
     required this.id,
@@ -15,6 +16,7 @@ class PendingTransaction {
     required this.sign,
     required this.timestampMs,
     required this.createdAt,
+    this.rawContent,
   });
 
   factory PendingTransaction.fromMap(Map<String, dynamic> map) {
@@ -26,6 +28,7 @@ class PendingTransaction {
       sign: map['sign'] as String,
       timestampMs: (map['timestamp_ms'] as num).toInt(),
       createdAt: (map['created_at'] as num).toInt(),
+      rawContent: map['raw_content'] as String?,
     );
   }
 

@@ -17,6 +17,11 @@ class PullService with WidgetsBindingObserver {
   final TransactionRepository _repo;
 
   bool _pulling = false;
+  int _lastPullCount = 0;
+  DateTime? _lastPullAt;
+
+  int get lastPullCount => _lastPullCount;
+  DateTime? get lastPullAt => _lastPullAt;
 
   PullService(this._repo);
 
@@ -53,6 +58,8 @@ class PullService with WidgetsBindingObserver {
       final count = await _repo.syncFromNative();
       if (count > 0) {
         AppLogger.info(_tag, 'Pull complete: $count new transaction(s)');
+        _lastPullCount = count;
+        _lastPullAt = DateTime.now();
       }
       return count;
     } on AppException catch (e, st) {

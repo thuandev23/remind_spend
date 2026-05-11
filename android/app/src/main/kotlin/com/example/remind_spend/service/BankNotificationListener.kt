@@ -9,6 +9,7 @@ import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.IdempotencyEntry
 import com.example.remind_spend.db.PendingTransaction
 import com.example.remind_spend.notification.LocalNotificationHelper
+import com.example.remind_spend.notification.TransactionEventBus
 import com.example.remind_spend.security.SecurityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,18 +57,35 @@ class BankNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         val packageName = sbn.packageName ?: return
-        val rule = RegexConfigLoader.findRuleForPackage(packageName) ?: return
+        val rules = RegexConfigLoader.findRulesForPackage(packageName)
+        if (rules.isEmpty()) return
 
         val text = extractText(sbn.notification?.extras)
         if (text.isEmpty()) return
 
-        val amount = RegexConfigLoader.parseAmount(text, rule) ?: run {
+        // Try each rule in order (credit before debit in hardcodedRules).
+        // First pattern match determines the amount and sign.
+        var matchedAmount: Long? = null
+        var matchedSign = "debit"
+        var matchedBankId = rules.first().bankId
+
+        for (rule in rules) {
+            val amount = RegexConfigLoader.parseAmount(text, rule)
+            if (amount != null) {
+                matchedAmount = amount
+                matchedSign = rule.sign
+                matchedBankId = rule.bankId
+                break
+            }
+        }
+
+        if (matchedAmount == null) {
             Log.w(TAG, "No regex match: pkg=$packageName text=${text.take(80)}")
             return
         }
 
         val idempotencyKey = NotificationProcessor.buildIdempotencyKey(
-            packageName, amount, sbn.postTime
+            packageName, matchedAmount, sbn.postTime
         )
 
         serviceScope.launch {
@@ -92,17 +110,18 @@ class BankNotificationListener : NotificationListenerService() {
                     PendingTransaction(
                         id = idempotencyKey,
                         packageName = packageName,
-                        bankId = rule.bankId,
-                        rawAmount = amount,
-                        sign = rule.sign,
+                        bankId = matchedBankId,
+                        rawAmount = matchedAmount,
+                        sign = matchedSign,
                         encryptedContent = securityManager.encrypt(text),
                         timestampMs = sbn.postTime,
                         createdAt = nowMs
                     )
                 )
                 if (rowId != -1L) {
-                    Log.i(TAG, "Enqueued: ${rule.bankId} ${amount}đ [${rule.sign}]")
-                    LocalNotificationHelper.show(applicationContext, rule.bankId, amount, rule.sign)
+                    Log.i(TAG, "Enqueued: $matchedBankId ${matchedAmount}đ [$matchedSign]")
+                    LocalNotificationHelper.show(applicationContext, matchedBankId, matchedAmount, matchedSign)
+                    TransactionEventBus.notifyNewTransaction()
                 }
             }.onFailure { e ->
                 Log.e(TAG, "Failed to process notification", e)

@@ -8,6 +8,7 @@ import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
 import com.example.remind_spend.db.IdempotencyEntry
 import com.example.remind_spend.db.PendingTransaction
+import com.example.remind_spend.notification.TransactionEventBus
 import com.example.remind_spend.security.SecurityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,12 +35,21 @@ class TestNotificationReceiver : BroadcastReceiver() {
         val pkg  = intent.getStringExtra("pkg")  ?: run { Log.w(TAG, "Missing extra: pkg");  return }
         val text = intent.getStringExtra("text") ?: run { Log.w(TAG, "Missing extra: text"); return }
 
-        val rule = RegexConfigLoader.findRuleForPackage(pkg) ?: run {
+        val rules = RegexConfigLoader.findRulesForPackage(pkg)
+        if (rules.isEmpty()) {
             Log.w(TAG, "No rule for package: $pkg")
             return
         }
 
-        val amount = RegexConfigLoader.parseAmount(text, rule) ?: run {
+        var matchedAmount: Long? = null
+        var matchedSign = "debit"
+        var matchedBankId = rules.first().bankId
+        for (rule in rules) {
+            val a = RegexConfigLoader.parseAmount(text, rule)
+            if (a != null) { matchedAmount = a; matchedSign = rule.sign; matchedBankId = rule.bankId; break }
+        }
+
+        if (matchedAmount == null) {
             Log.w(TAG, "No amount matched — pkg=$pkg text=${text.take(80)}")
             return
         }
@@ -58,16 +68,17 @@ class TestNotificationReceiver : BroadcastReceiver() {
                     PendingTransaction(
                         id               = id,
                         packageName      = pkg,
-                        bankId           = rule.bankId,
-                        rawAmount        = amount,
-                        sign             = rule.sign,
+                        bankId           = matchedBankId,
+                        rawAmount        = matchedAmount,
+                        sign             = matchedSign,
                         encryptedContent = sm.encrypt(text),
                         timestampMs      = nowMs,
                         createdAt        = nowMs
                     )
                 )
                 if (rowId != -1L) {
-                    Log.i(TAG, "Enqueued: bankId=${rule.bankId} amount=${amount}đ sign=${rule.sign}")
+                    Log.i(TAG, "Enqueued: bankId=$matchedBankId amount=${matchedAmount}đ sign=$matchedSign")
+                    TransactionEventBus.notifyNewTransaction()
                 } else {
                     Log.d(TAG, "Duplicate ignored: $id")
                 }

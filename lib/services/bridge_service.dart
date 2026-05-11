@@ -29,11 +29,17 @@ class BridgeError implements Exception {
 }
 
 class BridgeService {
-  static const _channel =
-      MethodChannel('com.example.remind_spend/transaction_bridge');
+  static const _channel = MethodChannel(
+    'com.example.remind_spend/transaction_bridge',
+  );
 
-  static const _permissionEventChannel =
-      EventChannel('com.example.remind_spend/permission_status');
+  static const _permissionEventChannel = EventChannel(
+    'com.example.remind_spend/permission_status',
+  );
+
+  static const _transactionEventChannel = EventChannel(
+    'com.example.remind_spend/transaction_events',
+  );
 
   static Future<List<PendingTransaction>> getAndClearQueue() async {
     try {
@@ -77,19 +83,24 @@ class BridgeService {
   // Emits the current status immediately, then on every change.
   static Stream<PermissionStatus> get permissionStatusStream =>
       _permissionEventChannel.receiveBroadcastStream().map(
-            (raw) => _parsePermissionStatus(raw as String?),
-          );
+        (raw) => _parsePermissionStatus(raw as String?),
+      );
+
+  // Emits "new_transaction" whenever native enqueues a new transaction.
+  // Subscribe while TransactionListScreen is active to auto-pull without polling.
+  static Stream<void> get transactionEventStream =>
+      _transactionEventChannel.receiveBroadcastStream().cast<void>();
 
   static Future<ManufacturerInfo> getManufacturerInfo() async {
     try {
       final raw = await _channel.invokeMethod<Map>('getManufacturerInfo');
       final map = Map<String, dynamic>.from(raw ?? {});
       final type = switch (map['type'] as String? ?? 'stock') {
-        'miui'    => ManufacturerType.miui,
-        'oneui'   => ManufacturerType.oneui,
+        'miui' => ManufacturerType.miui,
+        'oneui' => ManufacturerType.oneui,
         'coloros' => ManufacturerType.coloros,
-        'ios'     => ManufacturerType.ios,
-        _         => ManufacturerType.stock,
+        'ios' => ManufacturerType.ios,
+        _ => ManufacturerType.stock,
       };
       return ManufacturerInfo(
         manufacturer: map['manufacturer'] as String? ?? '',
@@ -111,8 +122,9 @@ class BridgeService {
   // On non-Android platforms, always returns true.
   static Future<bool> checkBatteryOptimization() async {
     try {
-      final result =
-          await _channel.invokeMethod<bool>('checkBatteryOptimization');
+      final result = await _channel.invokeMethod<bool>(
+        'checkBatteryOptimization',
+      );
       return result ?? true;
     } on MissingPluginException {
       return true;
@@ -168,7 +180,9 @@ class BridgeService {
   // Returns true if granted (or not required), false if denied.
   static Future<bool> requestPostNotificationsPermission() async {
     try {
-      final result = await _channel.invokeMethod<bool>('requestPostNotificationsPermission');
+      final result = await _channel.invokeMethod<bool>(
+        'requestPostNotificationsPermission',
+      );
       return result ?? true;
     } on MissingPluginException {
       return true;
@@ -181,7 +195,9 @@ class BridgeService {
   // Returns true if granted, false if denied.
   static Future<bool> requestLocalNotificationPermission() async {
     try {
-      final result = await _channel.invokeMethod<bool>('requestLocalNotificationPermission');
+      final result = await _channel.invokeMethod<bool>(
+        'requestLocalNotificationPermission',
+      );
       return result ?? false;
     } on MissingPluginException {
       return false;
@@ -207,12 +223,53 @@ class BridgeService {
     }
   }
 
-  static PermissionStatus _parsePermissionStatus(String? raw) =>
-      switch (raw) {
-        'granted'        => PermissionStatus.granted,
-        'revoked'        => PermissionStatus.revoked,
-        'restricted'     => PermissionStatus.restricted,
-        'not_applicable' => PermissionStatus.restricted, // iOS: App Intents always available
-        _                => PermissionStatus.denied,
-      };
+  // iOS only: last error from LogTransactionIntent, null if last run succeeded.
+  static Future<String?> getLastExtensionError() async {
+    try {
+      return await _channel.invokeMethod<String>('getLastExtensionError');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (e) {
+      return e.message;
+    }
+  }
+
+  // iOS only: returns list of bankIds for finance apps detected as installed.
+  // Uses canOpenURL — no permission needed, silent check.
+  static Future<List<String>> detectInstalledFinanceApps() async {
+    try {
+      final raw = await _channel.invokeMethod<List>(
+        'detectInstalledFinanceApps',
+      );
+      return raw?.cast<String>() ?? [];
+    } on MissingPluginException {
+      return [];
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
+  // Debug only: peek at KeychainQueue without clearing.
+  // Returns map with 'count', 'status', 'error'.
+  static Future<Map<String, dynamic>> debugKeychainPeek() async {
+    try {
+      final raw = await _channel.invokeMethod<Map>('debugKeychainPeek');
+      return Map<String, dynamic>.from(
+        raw ?? {'count': -1, 'error': 'null result'},
+      );
+    } on MissingPluginException {
+      return {'count': -1, 'error': 'MissingPlugin'};
+    } on PlatformException catch (e) {
+      return {'count': -1, 'error': e.message};
+    }
+  }
+
+  static PermissionStatus _parsePermissionStatus(String? raw) => switch (raw) {
+    'granted' => PermissionStatus.granted,
+    'revoked' => PermissionStatus.revoked,
+    'restricted' => PermissionStatus.restricted,
+    'not_applicable' =>
+      PermissionStatus.restricted, // iOS: App Intents always available
+    _ => PermissionStatus.denied,
+  };
 }

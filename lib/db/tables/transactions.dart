@@ -14,6 +14,9 @@ class Transactions extends Table {
   // Nullable — set when synced to backend (Sprint 5+).
   IntColumn get syncedAt => integer().nullable()();
 
+  // Raw SMS/notification text — nullable for rows migrated from older schema.
+  TextColumn get rawContent => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -52,5 +52,5 @@ interface RegexConfigDao {
     suspend fun getAll(): List<RegexConfigEntry>
 
     @Query("SELECT * FROM regex_config_cache WHERE bank_id = :bankId")
-    suspend fun getByBank(bankId: String): RegexConfigEntry?
+    suspend fun getByBank(bankId: String): List<RegexConfigEntry>
 }

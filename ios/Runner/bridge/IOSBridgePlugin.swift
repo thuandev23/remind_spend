@@ -13,16 +13,18 @@ import UserNotifications
 /// returned instance for the app's lifetime.
 final class IOSBridgePlugin: NSObject {
 
-    static let methodChannelName = "com.example.remind_spend/transaction_bridge"
-    static let eventChannelName  = "com.example.remind_spend/permission_status"
+    static let methodChannelName  = "com.example.remind_spend/transaction_bridge"
+    static let eventChannelName   = "com.example.remind_spend/permission_status"
+    static let txEventChannelName = "com.example.remind_spend/transaction_events"
 
     private let keychainQueue: KeychainQueue
+    private var txEventSink: FlutterEventSink?
 
     init(keychainQueue: KeychainQueue = .shared) {
         self.keychainQueue = keychainQueue
     }
 
-    /// Wires up both channels. Must be called once, on the main thread.
+    /// Wires up all channels. Must be called once, on the main thread.
     func register(with messenger: FlutterBinaryMessenger) {
         let method = FlutterMethodChannel(
             name: Self.methodChannelName,
@@ -35,6 +37,44 @@ final class IOSBridgePlugin: NSObject {
             binaryMessenger: messenger
         )
         event.setStreamHandler(self)
+
+        let txEvent = FlutterEventChannel(
+            name: Self.txEventChannelName,
+            binaryMessenger: messenger
+        )
+        txEvent.setStreamHandler(txEventStreamHandler)
+
+        registerDarwinObserver()
+    }
+
+    // Listens for cross-process signal posted by LogTransactionIntent after enqueue.
+    // CFNotificationCenter callbacks are C functions — bridge via an Unmanaged pointer.
+    private func registerDarwinObserver() {
+        let name = "com.example.remind_spend.new_transaction" as CFString
+        // passUnretained is safe: AppDelegate holds a strong reference for app lifetime.
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            selfPtr,
+            { _, observer, _, _, _ in
+                guard let ptr = observer else { return }
+                let plugin = Unmanaged<IOSBridgePlugin>.fromOpaque(ptr).takeUnretainedValue()
+                plugin.notifyNewTransaction()
+            },
+            name, nil, .deliverImmediately
+        )
+    }
+
+    private lazy var txEventStreamHandler: TxEventStreamHandler = {
+        TxEventStreamHandler { [weak self] sink in
+            self?.txEventSink = sink
+        }
+    }()
+
+    private func notifyNewTransaction() {
+        DispatchQueue.main.async { [weak self] in
+            self?.txEventSink?("new_transaction")
+        }
     }
 
     // MARK: - MethodChannel handler
@@ -78,6 +118,20 @@ final class IOSBridgePlugin: NSObject {
         case "clearIdempotencyCache":
             result(nil)    // no-op: Shortcuts deduplication is handled at the OS level
 
+        case "updateRegexConfig":
+            handleUpdateRegexConfig(call: call, result: result)
+
+        case "getLastExtensionError":
+            let err = UserDefaults(suiteName: "group.com.example.remind_spend")?
+                .string(forKey: "last_extension_error")
+            result(err)
+
+        case "debugKeychainPeek":
+            handleDebugKeychainPeek(result: result)
+
+        case "detectInstalledFinanceApps":
+            handleDetectInstalledFinanceApps(result: result)
+
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -93,6 +147,7 @@ final class IOSBridgePlugin: NSObject {
             }
             do {
                 let items = try self.keychainQueue.dequeueAll()
+                NSLog("[RemindSpend] getAndClearQueue: found \(items.count) items in KeychainQueue")
                 let maps: [[String: Any]] = items.map { tx in
                     [
                         "id":           tx.id,
@@ -101,7 +156,8 @@ final class IOSBridgePlugin: NSObject {
                         "amount_vnd":   tx.amountVnd,
                         "sign":         tx.sign,
                         "timestamp_ms": tx.timestampMs,
-                        "created_at":   tx.createdAt
+                        "created_at":   tx.createdAt,
+                        "raw_content":  tx.rawContent as Any
                     ]
                 }
                 DispatchQueue.main.async { result(maps) }
@@ -130,22 +186,23 @@ final class IOSBridgePlugin: NSObject {
         )
         do {
             try keychainQueue.enqueue(mock)
+            notifyNewTransaction()
             result(true)
         } catch {
             result(FlutterError(code: "MOCK_ERROR", message: error.localizedDescription, details: nil))
         }
     }
 
-    // Mirrors LogTransactionIntent.perform() exactly — runs smsText through
+    // Mirrors LogTransactionIntent.perform() exactly — runs messageText through
     // BankRegexParser, builds payload with real idempotency key, enqueues to
     // KeychainQueue. Use this for debug testing instead of mockTransaction.
     private func handleSimulateBankNotification(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let smsText = call.arguments as? String, !smsText.isEmpty else {
-            result(FlutterError(code: "INVALID_ARGUMENT", message: "smsText must be a non-empty string", details: nil))
+        guard let messageText = call.arguments as? String, !messageText.isEmpty else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "messageText must be a non-empty string", details: nil))
             return
         }
-        guard let parsed = BankRegexParser.parse(text: smsText) else {
-            result(FlutterError(code: "PARSE_FAILED", message: "SMS did not match any known bank pattern", details: nil))
+        guard let parsed = BankRegexParser.parse(text: messageText) else {
+            result(FlutterError(code: "PARSE_FAILED", message: "Message did not match any known bank pattern", details: nil))
             return
         }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1_000)
@@ -154,12 +211,13 @@ final class IOSBridgePlugin: NSObject {
             bankId: parsed.bankId,
             amountVnd: parsed.amountVnd,
             sign: parsed.sign,
-            rawContent: smsText,
+            rawContent: messageText,
             timestampMs: nowMs,
             createdAt: nowMs
         )
         do {
             try keychainQueue.enqueue(payload)
+            notifyNewTransaction()
             result(true)
         } catch {
             result(FlutterError(code: "KEYCHAIN_ERROR", message: error.localizedDescription, details: nil))
@@ -174,6 +232,52 @@ final class IOSBridgePlugin: NSObject {
         return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 
+    // Debug only: peek at KeychainQueue in two modes:
+    //   withGroup  — uses App Group (what production code does)
+    //   noGroup    — reads same item key without any access group
+    // Returns "withGroup" and "noGroup" counts + statuses so we can tell
+    // whether the App Group entitlement is actually shared between targets.
+    // Saves dynamic regex rules to App Group UserDefaults so the extension
+    // can read them in LogTransactionIntent.perform() at runtime.
+    private func handleUpdateRegexConfig(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let rules = call.arguments as? [[String: Any]] else {
+            result(nil)
+            return
+        }
+        let defaults = UserDefaults(suiteName: "group.com.example.remind_spend")
+        if let data = try? JSONSerialization.data(withJSONObject: rules) {
+            defaults?.set(data, forKey: "dynamic_regex_rules")
+            NSLog("[RemindSpend] updateRegexConfig: saved \(rules.count) rules to App Group UserDefaults")
+        }
+        result(nil)
+    }
+
+    private func handleDebugKeychainPeek(result: @escaping FlutterResult) {
+        DispatchQueue.global(qos: .utility).async {
+            let withGroup = KeychainQueue(accessGroup: "group.com.example.remind_spend",
+                                          itemKey: "pending_transactions")
+            let noGroup   = KeychainQueue(accessGroup: nil,
+                                          itemKey: "pending_transactions")
+
+            func probe(_ q: KeychainQueue) -> [String: Any] {
+                do {
+                    let items = try q.peek()
+                    return ["count": items.count, "status": 0, "error": ""]
+                } catch KeychainError.unexpectedStatus(let s) {
+                    return ["count": -1, "status": Int(s), "error": "OSStatus \(s)"]
+                } catch {
+                    return ["count": -1, "status": -1, "error": error.localizedDescription]
+                }
+            }
+
+            let r: [String: Any] = [
+                "withGroup": probe(withGroup),
+                "noGroup":   probe(noGroup)
+            ]
+            DispatchQueue.main.async { result(r) }
+        }
+    }
+
     private func handleRequestLocalNotificationPermission(result: @escaping FlutterResult) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
@@ -183,6 +287,44 @@ final class IOSBridgePlugin: NSObject {
                     result(granted)
                 }
             }
+        }
+    }
+
+    // 1. Tách biệt Data Model ra khỏi Business Logic
+    private struct FinanceApp {
+        let id: String
+        let schemes: [String]
+        
+        static let supported: [FinanceApp] = [
+            FinanceApp(id: "momo", schemes: ["momo"]),
+            FinanceApp(id: "zalopay", schemes: ["zalopay"]),
+            FinanceApp(id: "vcb", schemes: ["vietcombank", "vcbdigibank", "vcb"]),
+            FinanceApp(id: "mb", schemes: ["mbbank", "mbmobile", "mb"]),
+            FinanceApp(id: "bidv", schemes: ["bidvsmartbanking", "bidv"]),
+            FinanceApp(id: "tcb", schemes: ["techcombank", "tcb", "fastmobile"]),
+            FinanceApp(id: "vpb", schemes: ["vpbankneo", "vpbank"]),
+            FinanceApp(id: "agr", schemes: ["agribankmobile", "agribank", "vba"]),
+            FinanceApp(id: "tpb", schemes: ["tpbank", "tpbdigital"]),
+            FinanceApp(id: "scb", schemes: ["sacombankpay", "sacombank"]),
+            FinanceApp(id: "acb", schemes: ["acbapp", "acbonline", "acb"]),
+            FinanceApp(id: "vtb", schemes: ["vietinbankipay", "vietinbank", "vtb"]),
+        ]
+    }
+
+    // 2. Checks which finance apps are installed via canOpenURL.
+    // Schemes must be declared in LSApplicationQueriesSchemes in Info.plist.
+    private func handleDetectInstalledFinanceApps(result: @escaping FlutterResult) {
+        // 3. Đảm bảo Thread-Safety cho UIApplication API
+        DispatchQueue.main.async {
+            let detected = FinanceApp.supported.compactMap { app -> String? in
+                for scheme in app.schemes {
+                    if let url = URL(string: "\(scheme)://"), UIApplication.shared.canOpenURL(url) {
+                        return app.id
+                    }
+                }
+                return nil
+            }
+            result(detected)
         }
     }
 
@@ -212,6 +354,26 @@ extension IOSBridgePlugin: FlutterStreamHandler {
     }
 
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        return nil
+    }
+}
+
+// MARK: - TxEventStreamHandler
+
+private class TxEventStreamHandler: NSObject, FlutterStreamHandler {
+    private let onSinkChanged: (FlutterEventSink?) -> Void
+
+    init(onSinkChanged: @escaping (FlutterEventSink?) -> Void) {
+        self.onSinkChanged = onSinkChanged
+    }
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        onSinkChanged(events)
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        onSinkChanged(nil)
         return nil
     }
 }

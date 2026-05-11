@@ -20,14 +20,16 @@ class AppDb extends _$AppDb {
   AppDb.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
           if (from < 2) {
-            // Add RegexConfigCache table (new in schema v2).
             await m.createTable(regexConfigCache);
+          }
+          if (from < 3) {
+            await m.addColumn(transactions, transactions.rawContent);
           }
         },
       );

@@ -113,62 +113,147 @@ class RemoteConfigService {
 
 // ── Tier 3: Hardcoded fallback ────────────────────────────────────────────────
 // Mirrors Android RegexConfigLoader.hardcodedRules and iOS BankRegexParser.rules.
-// Update here AND in native code when adding new banks.
+// Credit rules listed before debit — native code tries each rule in order.
 const hardcodedRules = [
+
+  // ── VCB (Vietcombank) ──────────────────────────────────────────────────────
   BankRule(
     bankId: 'vcb',
     packageNames: ['com.VCB'],
-    patterns: [
-      r'GD: ?-([0-9,.]+) ?VND',
-      r'Debit: ?([0-9,.]+) ?VND',
-      r'So du TK[^:]*: ?([0-9,.]+) ?VND',
-      r'So du: ?([0-9,.]+) ?VND',
-    ],
+    patterns: [r'GD: ?\+([0-9,.]+) ?VND', r'Credit:? ?([0-9,.]+) ?VND'],
+    sign: 'credit',
+  ),
+  BankRule(
+    bankId: 'vcb',
+    packageNames: ['com.VCB'],
+    patterns: [r'GD: ?-([0-9,.]+) ?VND', r'Debit:? ?([0-9,.]+) ?VND'],
     sign: 'debit',
+  ),
+
+  // ── MB Bank ────────────────────────────────────────────────────────────────
+  BankRule(
+    bankId: 'mb',
+    packageNames: ['com.mbmobile'],
+    patterns: [
+      r'nh[aậ]n[^0-9]*([0-9,.]+) ?(?:đ|d)\b',
+      r'c[oộ]ng[^0-9]*([0-9,.]+) ?(?:đ|d)\b',
+    ],
+    sign: 'credit',
   ),
   BankRule(
     bankId: 'mb',
     packageNames: ['com.mbmobile'],
     patterns: [
-      r'(?:chi|giao dịch)[^0-9]*([0-9,.]+) ?đ',
-      r'Số dư: ?([0-9,.]+) ?đ',
-      r'So du: ?([0-9,.]+)',
+      r'chi[^0-9]*([0-9,.]+) ?(?:đ|d)\b',
+      r'giao d[iị]ch[^0-9]*([0-9,.]+) ?(?:đ|d)\b',
     ],
     sign: 'debit',
+  ),
+
+  // ── Techcombank ────────────────────────────────────────────────────────────
+  BankRule(
+    bankId: 'tcb',
+    packageNames: ['com.techcombank.mb.portal'],
+    patterns: [r'GD: ?\+([0-9,.]+) ?VND'],
+    sign: 'credit',
   ),
   BankRule(
     bankId: 'tcb',
     packageNames: ['com.techcombank.mb.portal'],
-    patterns: [
-      r'GD: ?-([0-9,.]+)VND',
-      r'([0-9,.]+) VND',
-    ],
+    patterns: [r'GD: ?-([0-9,.]+) ?VND'],
     sign: 'debit',
+  ),
+
+  // ── ACB ────────────────────────────────────────────────────────────────────
+  BankRule(
+    bankId: 'acb',
+    packageNames: ['com.acb'],
+    patterns: [
+      r'[Gg]hi c[oó][^0-9]*([0-9,.]+) ?VND',
+      r'[Ss]o ti[eề]n: ?\+([0-9,.]+) ?VND',
+    ],
+    sign: 'credit',
   ),
   BankRule(
     bankId: 'acb',
     packageNames: ['com.acb'],
     patterns: [
+      r'[Gg]hi n[oợ][^0-9]*([0-9,.]+) ?VND',
+      r'[Ss]o ti[eề]n: ?-([0-9,.]+) ?VND',
       r'([0-9,.]+) VND',
       r'([0-9,.]+)VND',
     ],
     sign: 'debit',
   ),
+
+  // ── BIDV ───────────────────────────────────────────────────────────────────
+  BankRule(
+    bankId: 'bidv',
+    packageNames: ['com.BIDV.SmartBanking'],
+    patterns: [
+      r'(?:t[aă]ng|[Cc][oộ]ng|nh[aậ]n)[^0-9]*([0-9,.]+) ?VND',
+      r'Credit[^0-9]*([0-9,.]+) ?VND',
+    ],
+    sign: 'credit',
+  ),
+  BankRule(
+    bankId: 'bidv',
+    packageNames: ['com.BIDV.SmartBanking'],
+    patterns: [
+      r'(?:gi[aả]m|[Tt]r[uừ])[^0-9]*([0-9,.]+) ?VND',
+      r'Debit[^0-9]*([0-9,.]+) ?VND',
+    ],
+    sign: 'debit',
+  ),
+
+  // ── Vietinbank ─────────────────────────────────────────────────────────────
+  BankRule(
+    bankId: 'vtb',
+    packageNames: ['com.VietinBank.iPay'],
+    patterns: [r'[Tt][aă]ng[^0-9]*([0-9,.]+) ?VND', r'Credit[^0-9]*([0-9,.]+) ?VND'],
+    sign: 'credit',
+  ),
+  BankRule(
+    bankId: 'vtb',
+    packageNames: ['com.VietinBank.iPay'],
+    patterns: [r'[Gg]i[aả]m[^0-9]*([0-9,.]+) ?VND', r'Debit[^0-9]*([0-9,.]+) ?VND'],
+    sign: 'debit',
+  ),
+
+  // ── MoMo ───────────────────────────────────────────────────────────────────
   BankRule(
     bankId: 'momo',
     packageNames: ['com.mservice.momotransfer'],
     patterns: [
-      r'(?:chi|thanh toán)[^0-9]*([0-9,.]+)đ',
-      r'Bạn đã (?:chi|gửi)[^0-9]*([0-9,.]+)(?:đ|VND)',
+      r'nh[aậ]n[^0-9]*([0-9,.]+) ?(?:đ|d|VND)',
+      r'ho[aà]n ti[eề]n[^0-9]*([0-9,.]+) ?(?:đ|d|VND)',
+    ],
+    sign: 'credit',
+  ),
+  BankRule(
+    bankId: 'momo',
+    packageNames: ['com.mservice.momotransfer'],
+    patterns: [
+      r'(?:chi|thanh to[aá]n)[^0-9]*([0-9,.]+)(?:đ|d)',
+      r'B[aạ]n [dđ][aã] (?:chi|g[uử]i)[^0-9]*([0-9,.]+)(?:đ|d|VND)',
     ],
     sign: 'debit',
   ),
+
+  // ── ZaloPay ────────────────────────────────────────────────────────────────
   BankRule(
     bankId: 'zalopay',
     packageNames: ['com.vnpay.zalopay'],
     patterns: [
-      r'(?:chi|thanh toán)[^0-9]*([0-9,.]+)(?:đ|VND)',
+      r'nh[aậ]n[^0-9]*([0-9,.]+) ?(?:đ|d|VND)',
+      r'ho[aà]n[^0-9]*([0-9,.]+) ?(?:đ|d|VND)',
     ],
+    sign: 'credit',
+  ),
+  BankRule(
+    bankId: 'zalopay',
+    packageNames: ['com.vnpay.zalopay'],
+    patterns: [r'(?:chi|thanh to[aá]n)[^0-9]*([0-9,.]+)(?:đ|d|VND)'],
     sign: 'debit',
   ),
 ];

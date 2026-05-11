@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -30,6 +31,12 @@ class _TransactionListScreenState extends State<TransactionListScreen>
   late final TransactionRepository _repo;
   late final PullService _pull;
   bool _isPulling = false;
+  StreamSubscription<void>? _txEventSub;
+
+  // IDs seen at least once — prevents re-animating on every StreamBuilder rebuild.
+  final Set<String> _knownIds = {};
+  // IDs currently mid-animation (slide-in from top + fade).
+  final Set<String> _animatingIds = {};
 
   @override
   void initState() {
@@ -39,13 +46,16 @@ class _TransactionListScreenState extends State<TransactionListScreen>
     _pull = widget.pullService ?? PullService(_repo);
     _pull.start();
     WidgetsBinding.instance.addObserver(this);
-    // Cold start: didChangeAppLifecycleState(resumed) không fire khi app bị kill
-    // và mở lại — cần pull thủ công sau frame đầu tiên.
     WidgetsBinding.instance.addPostFrameCallback((_) => _pull.pull());
+
+    // Auto-pull khi native enqueue transaction mới (foreground real-time update).
+    _txEventSub = BridgeService.transactionEventStream.listen((_) => _pull.pull());
+
   }
 
   @override
   void dispose() {
+    _txEventSub?.cancel();
     _pull.stop();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -88,6 +98,20 @@ class _TransactionListScreenState extends State<TransactionListScreen>
           }
           final txs = snapshot.data ?? [];
           if (txs.isEmpty) return _buildEmpty();
+
+          // Detect first-time-seen IDs — animate only new arrivals, not initial load.
+          final incoming = txs.map((t) => t.id).toSet();
+          if (_knownIds.isNotEmpty) {
+            final newIds = incoming.difference(_knownIds);
+            if (newIds.isNotEmpty) {
+              _animatingIds.addAll(newIds);
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted) setState(() => _animatingIds.removeAll(newIds));
+              });
+            }
+          }
+          _knownIds.addAll(incoming);
+
           return _buildList(txs);
         },
       ),
@@ -209,23 +233,28 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                 ),
               ),
             ),
-            // Transactions for this date
+            // Transactions for this date — Column avoids nested ListView/shrinkWrap jank.
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: const Color(0xFFEEEEEE)),
               ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const Divider(
-                  height: 0,
-                  indent: 60,
-                  color: Color(0xFFEEEEEE),
-                ),
-                itemBuilder: (context, i) => _TransactionTile(tx: items[i]),
+              child: Column(
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    if (i > 0)
+                      const Divider(
+                        height: 0,
+                        indent: 60,
+                        color: Color(0xFFEEEEEE),
+                      ),
+                    _AnimatedNewItem(
+                      animate: _animatingIds.contains(items[i].id),
+                      child: _TransactionTile(tx: items[i]),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -250,10 +279,21 @@ class _TransactionListScreenState extends State<TransactionListScreen>
   void _showDebugSheet() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => const _DebugSheet(),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, controller) => SingleChildScrollView(
+          controller: controller,
+          child: const _DebugSheet(),
+        ),
+      ),
     );
   }
 
@@ -261,6 +301,32 @@ class _TransactionListScreenState extends State<TransactionListScreen>
     // Fallback — thực tế nên inject từ main.dart
     throw StateError(
         'TransactionRepository not provided. Pass it via widget.repo.');
+  }
+}
+
+// ─── New-item slide-in animation ──────────────────────────────────────────────
+class _AnimatedNewItem extends StatelessWidget {
+  final bool animate;
+  final Widget child;
+  const _AnimatedNewItem({required this.animate, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!animate) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOut,
+      // Pass child through so Flutter doesn't rebuild it on every animation tick.
+      child: child,
+      builder: (_, value, inner) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, -14 * (1 - value)),
+          child: inner,
+        ),
+      ),
+    );
   }
 }
 
@@ -364,8 +430,19 @@ class _DebugSheetState extends State<_DebugSheet> {
   bool _battery = false;
 
   final _smsController = TextEditingController(
-    text: 'GD: 250,000 VND tai ATM. So du: 5,000,000VND',
+    text: 'Ban da nhan 100,000d tu ngan hang MB',
   );
+
+  static const _presets = [
+    ('MB credit',      'Ban da nhan 100,000d tu ngan hang MB'),
+    ('MB debit',       'chi 50,000d phi dich vu MB'),
+    ('VCB credit',     'GD: +1,234,567 VND. So du: 10,000,000VND'),
+    ('VCB debit',      'GD: -250,000 VND. So du: 9,750,000VND'),
+    ('TCB credit',     'GD: +500,000 VND vao TK Techcombank'),
+    ('BIDV credit',    'Tang 300,000 VND vao TK BIDV'),
+    ('MoMo credit',    'Ban da nhan 75,000d tu Nguyen Van A qua MoMo'),
+    ('ZaloPay credit', 'Ban da nhan 50,000d tu B qua ZaloPay'),
+  ];
   bool _simulating = false;
 
   @override
@@ -414,8 +491,13 @@ class _DebugSheetState extends State<_DebugSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,6 +524,39 @@ class _DebugSheetState extends State<_DebugSheet> {
               child: const Text('Clear idempotency cache'),
             ),
           ),
+          if (kDebugMode && Platform.isIOS) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
+                  final err = await BridgeService.getLastExtensionError();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(err == null ? '✅ Extension: no errors' : '❌ Extension: $err'),
+                    backgroundColor: err == null ? Colors.green : Colors.red,
+                    duration: const Duration(seconds: 8),
+                  ));
+                },
+                child: const Text('⚠️ Last extension error'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
+                  final info = await BridgeService.debugKeychainPeek();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Keychain: count=${info['count']} status=${info['status']} err=${info['error']}'),
+                    duration: const Duration(seconds: 6),
+                  ));
+                },
+                child: const Text('🔑 Keychain peek (debug)'),
+              ),
+            ),
+          ],
           // iOS-only: simulate bank SMS notification (equivalent of ADB broadcast on Android)
           if (kDebugMode && Platform.isIOS) ...[
             const SizedBox(height: 24),
@@ -456,7 +571,17 @@ class _DebugSheetState extends State<_DebugSheet> {
               'Chạy qua BankRegexParser → KeychainQueue.\nTương đương ADB broadcast trên Android.',
               style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: _presets.map((p) => ActionChip(
+                label: Text(p.$1, style: const TextStyle(fontSize: 11)),
+                padding: EdgeInsets.zero,
+                onPressed: () => _smsController.text = p.$2,
+              )).toList(),
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: _smsController,
               decoration: InputDecoration(
