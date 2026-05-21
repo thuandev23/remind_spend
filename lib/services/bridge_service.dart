@@ -275,6 +275,20 @@ class BridgeService {
     }
   }
 
+  static Future<bool> sendLocalNotification(String title, String body) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('sendLocalNotification', {
+        'title': title,
+        'body': body,
+      });
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (e) {
+      throw BridgeError(e.code, e.message ?? 'Unknown error');
+    }
+  }
+
   static PermissionStatus _parsePermissionStatus(String? raw) => switch (raw) {
     'granted' => PermissionStatus.granted,
     'revoked' => PermissionStatus.revoked,

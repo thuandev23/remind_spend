@@ -5,6 +5,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../db/app_db.dart';
 import '../models/category.dart';
 import '../repositories/transaction_repository.dart';
+import '../services/budget_service.dart';
+import 'budget_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final TransactionRepository repo;
@@ -23,11 +25,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _touchedPieIndex = -1;
 
   late final Stream<List<Transaction>> _txStream;
+  Map<String, int> _budgets = {};
+  bool _loadingBudgets = true;
 
   @override
   void initState() {
     super.initState();
     _txStream = widget.repo.watchAll();
+    _loadBudgets();
+  }
+
+  Future<void> _loadBudgets() async {
+    final budgets = await BudgetService.getAllBudgets();
+    if (mounted) {
+      setState(() {
+        _budgets = budgets;
+        _loadingBudgets = false;
+      });
+    }
+  }
+
+  Future<void> _goToBudgetScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BudgetScreen(repo: widget.repo),
+      ),
+    );
+    _loadBudgets(); // Làm mới dữ liệu ngân sách sau khi quay lại
   }
 
   // Helper format tiền tệ VND
@@ -95,6 +120,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.track_changes_rounded, color: Color(0xFF1A1A1A)),
+            tooltip: 'Quản lý ngân sách',
+            onPressed: _goToBudgetScreen,
+          ),
+        ],
       ),
       body: StreamBuilder<List<Transaction>>(
         stream: _txStream,
@@ -127,8 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final Map<String, int> categorySpending = {};
           for (final tx in filteredTransactions) {
             if (tx.sign == 'debit') {
-              // Map trạng thái 'ai_pending' sang 'others' tạm thời trên dashboard
-              final categoryId = (tx.categoryId == 'ai_pending') ? 'others' : (tx.categoryId ?? 'others');
+              final categoryId = tx.categoryId ?? 'others';
               categorySpending[categoryId] = (categorySpending[categoryId] ?? 0) + tx.amountVnd;
             }
           }
@@ -148,6 +179,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Thẻ Tóm tắt tài chính dạng Grid
               _buildFinancialSummary(totalIncome, totalExpense, netFlow),
               const SizedBox(height: 24),
+
+              // Panel ngân sách tổng quan tháng này (Chỉ hiển thị khi đang lọc Tháng này)
+              if (_selectedPeriod == 0 && !_loadingBudgets) ...[
+                _buildBudgetOverviewPanel(totalExpense),
+                const SizedBox(height: 24),
+              ],
 
               // Biểu đồ tròn - Phân bổ chi tiêu (Pie Chart Panel)
               _buildPieChartPanel(totalExpense, sortedCategories),
@@ -395,6 +432,183 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // WIDGET: Panel Tóm tắt Ngân sách tháng này (Glassmorphism)
+  Widget _buildBudgetOverviewPanel(int totalExpense) {
+    int totalBudget = 0;
+    for (final val in _budgets.values) {
+      totalBudget += val;
+    }
+
+    if (totalBudget == 0) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF2F2F7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.track_changes_rounded, color: Color(0xFF8E8E93), size: 20),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Chưa thiết lập ngân sách',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A1A1A)),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Đặt hạn mức để kiểm soát chi tiêu kỷ luật hơn!',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF8E8E93)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _goToBudgetScreen,
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.08),
+                foregroundColor: const Color(0xFF007AFF),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+              child: const Text('Thiết lập', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final double percent = totalExpense / totalBudget;
+    final Color overallColor = percent >= 1.0
+        ? const Color(0xFFFF2D55) // Đỏ
+        : percent >= 0.8
+            ? const Color(0xFFFF9500) // Vàng
+            : const Color(0xFF34C759); // Xanh lá
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: _goToBudgetScreen,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.track_changes_rounded, color: Color(0xFF1A1A1A), size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Giám sát ngân sách tháng',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF1A1A1A)),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          percent >= 1.0
+                              ? 'Vượt hạn mức! ⚠️'
+                              : 'Đã dùng ${(percent * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: overallColor),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFC7C7CC)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      _formatVnd(totalExpense),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A1A1A)),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '/ ${_formatVnd(totalBudget)}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF8E8E93)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Thanh tiến trình ngân sách đổi màu sinh động
+                Stack(
+                  children: [
+                    Container(
+                      height: 5,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE5E5EA),
+                        borderRadius: BorderRadius.circular(2.5),
+                      ),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: percent.clamp(0.0, 1.0),
+                      child: Container(
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: overallColor,
+                          borderRadius: BorderRadius.circular(2.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: overallColor.withValues(alpha: 0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // WIDGET: Biểu đồ tròn phân bổ chi tiêu
   Widget _buildPieChartPanel(int totalExpense, List<MapEntry<String, int>> sortedCategories) {
     if (totalExpense == 0) {
@@ -574,6 +788,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final pct = (entry.value / totalExpense) * 100;
               final isTouched = _touchedPieIndex == index;
 
+              // Lấy budget nếu là Tháng này
+              final budget = _selectedPeriod == 0 ? (_budgets[cat.id] ?? 0) : 0;
+              final double budgetPercent = budget > 0 ? (entry.value / budget) : 0.0;
+              
+              // Màu sắc progress bar của legend: đổi màu theo ngân sách nếu có thiết lập ngân sách
+              final Color legendProgressColor = budget > 0
+                  ? (budgetPercent >= 1.0
+                      ? const Color(0xFFFF2D55) // Đỏ
+                      : budgetPercent >= 0.8
+                          ? const Color(0xFFFF9500) // Vàng
+                          : const Color(0xFF34C759)) // Xanh lá
+                  : cat.color;
+
               return InkWell(
                 onTap: () {
                   setState(() {
@@ -631,16 +858,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ),
                                 FractionallySizedBox(
-                                  widthFactor: pct / 100,
+                                  widthFactor: (budget > 0 ? budgetPercent.clamp(0.0, 1.0) : (pct / 100)),
                                   child: Container(
                                     height: 4,
                                     decoration: BoxDecoration(
-                                      color: cat.color,
+                                      color: legendProgressColor,
                                       borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 4),
+                            // Thông tin nhãn nhỏ giải thích ở dưới
+                            Text(
+                              budget > 0
+                                  ? 'Ngân sách: Đã chi ${_formatVnd(entry.value)} / ${_formatVnd(budget)} (${(budgetPercent * 100).toStringAsFixed(0)}%)'
+                                  : 'Tỉ lệ: ${pct.toStringAsFixed(1)}% chi tiêu toàn bộ',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: budget > 0 ? legendProgressColor : const Color(0xFF8E8E93),
+                              ),
                             ),
                           ],
                         ),

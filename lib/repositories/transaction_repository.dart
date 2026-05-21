@@ -7,11 +7,14 @@ import '../models/pending_transaction.dart';
 import '../services/bridge_service.dart';
 import '../services/categorization_service.dart';
 import '../services/gemini_service.dart';
+import '../services/budget_service.dart';
 
 const _tag = 'TransactionRepository';
 
 class TransactionRepository {
   final AppDb _db;
+
+  AppDb get db => _db;
 
   TransactionRepository(this._db);
 
@@ -93,18 +96,40 @@ class TransactionRepository {
   Future<List<Transaction>> getAll() => _db.getAll();
 
   /// Approve a pending draft transaction
-  Future<void> approveTransaction(String id) => _db.approveTransaction(id);
+  Future<void> approveTransaction(String id) async {
+    final tx = await (_db.select(_db.transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+    await _db.approveTransaction(id);
+    if (tx != null && tx.sign == 'debit') {
+      await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+    }
+  }
 
   /// Delete a transaction (reject draft or delete official transaction)
-  Future<void> deleteTransaction(String id) => _db.deleteTransaction(id);
+  Future<void> deleteTransaction(String id) async {
+    final tx = await (_db.select(_db.transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+    await _db.deleteTransaction(id);
+    if (tx != null && tx.sign == 'debit') {
+      await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+    }
+  }
 
   /// Adjust the amount of a transaction and approve it
-  Future<void> updateTransactionAmount(String id, int amountVnd) =>
-      _db.updateTransactionAmount(id, amountVnd);
+  Future<void> updateTransactionAmount(String id, int amountVnd) async {
+    await _db.updateTransactionAmount(id, amountVnd);
+    final tx = await (_db.select(_db.transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (tx != null && tx.sign == 'debit') {
+      await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+    }
+  }
 
   /// Update flexible transaction companion fields directly (e.g. amount & sign)
-  Future<void> updateTransactionCompanion(String id, TransactionsCompanion entry) =>
-      _db.updateTransactionCompanion(id, entry);
+  Future<void> updateTransactionCompanion(String id, TransactionsCompanion entry) async {
+    await _db.updateTransactionCompanion(id, entry);
+    final tx = await (_db.select(_db.transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (tx != null && tx.sign == 'debit') {
+      await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+    }
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -109,6 +109,9 @@ final class IOSBridgePlugin: NSObject {
         case "simulateBankNotification":
             handleSimulateBankNotification(call: call, result: result)
 
+        case "sendLocalNotification":
+            handleSendLocalNotification(call: call, result: result)
+
         case "requestLocalNotificationPermission":
             handleRequestLocalNotificationPermission(result: result)
 
@@ -341,6 +344,31 @@ final class IOSBridgePlugin: NSObject {
         }
         UIApplication.shared.open(url, options: [:]) { opened in
             result(opened)
+        }
+    }
+
+    private func handleSendLocalNotification(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let title = args["title"] as? String,
+              let body = args["body"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Title or Body is missing", details: nil))
+            return
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                result(FlutterError(code: "NOTIFICATION_ERROR", message: error.localizedDescription, details: nil))
+            } else {
+                result(true)
+            }
         }
     }
 }

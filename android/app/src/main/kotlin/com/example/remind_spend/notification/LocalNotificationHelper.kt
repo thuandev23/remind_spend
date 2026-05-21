@@ -48,5 +48,21 @@ object LocalNotificationHelper {
         }
     }
 
+    fun showCustom(context: Context, title: String, body: String) {
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(notifIdCounter.getAndIncrement(), notification)
+        } catch (e: SecurityException) {
+            Log.d(TAG, "POST_NOTIFICATIONS not granted, skipping")
+        }
+    }
+
     private fun formatAmount(amount: Long): String = String.format("%,d", amount)
 }

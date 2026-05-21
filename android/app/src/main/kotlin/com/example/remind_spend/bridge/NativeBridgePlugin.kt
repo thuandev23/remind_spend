@@ -131,6 +131,7 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             "requestPostNotificationsPermission"     -> handleRequestPostNotificationsPermission(result)
             "mockTransaction"                        -> handleMockTransaction(call, result)
             "simulateBankNotification"               -> handleSimulateBankNotification(call, result)
+            "sendLocalNotification"                  -> handleSendLocalNotification(call, result)
             else                                     -> result.notImplemented()
         }
     }
@@ -407,6 +408,13 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             permissionObserver = null
         }
         eventSink = null
+    }
+
+    private fun handleSendLocalNotification(call: MethodCall, result: MethodChannel.Result) {
+        val title = call.argument<String>("title") ?: "Remind Spend"
+        val body = call.argument<String>("body") ?: ""
+        LocalNotificationHelper.showCustom(context, title, body)
+        result.success(true)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
