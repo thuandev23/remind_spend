@@ -4,7 +4,7 @@ import 'package:workmanager/workmanager.dart';
 import 'db/app_db.dart';
 import 'repositories/transaction_repository.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/transaction_list_screen.dart';
+import 'screens/main_navigation_screen.dart';
 import 'services/background_pull_worker.dart';
 import 'services/bridge_service.dart';
 import 'services/pull_service.dart';
@@ -69,7 +69,7 @@ class MyApp extends StatelessWidget {
 // _StartupRouter
 //
 // Check permission một lần duy nhất khi app cold start.
-// → Granted: TransactionListScreen
+// → Granted: MainNavigationScreen
 // → Not granted: OnboardingScreen
 //
 // Không block main() — check async sau khi UI đã render.
@@ -141,7 +141,7 @@ class _StartupRouterState extends State<_StartupRouter> {
     }
 
     if (_permissionGranted!) {
-      return TransactionListScreen(
+      return MainNavigationScreen(
         repo: widget.repo,
         pullService: widget.pullService,
       );
@@ -149,7 +149,7 @@ class _StartupRouterState extends State<_StartupRouter> {
 
     return OnboardingScreen(
       pullService: widget.pullService,
-      onComplete: () => TransactionListScreen(
+      onComplete: () => MainNavigationScreen(
         repo: widget.repo,
         pullService: widget.pullService,
       ),

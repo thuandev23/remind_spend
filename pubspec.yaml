@@ -34,6 +34,9 @@ dependencies:
   # Background periodic pull (Android WorkManager + iOS BGTaskScheduler)
   workmanager: ^0.9.0
 
+  # Interactive and beautiful charting library
+  fl_chart: ^0.71.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
