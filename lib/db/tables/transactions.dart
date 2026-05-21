@@ -17,6 +17,9 @@ class Transactions extends Table {
   // Raw SMS/notification text — nullable for rows migrated from older schema.
   TextColumn get rawContent => text().nullable()();
 
+  // Mới thêm: Trạng thái Draft (Needs Review) để phân biệt giao dịch tự động chưa duyệt
+  BoolColumn get isDraft => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

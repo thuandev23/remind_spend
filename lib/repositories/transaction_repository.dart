@@ -59,6 +59,20 @@ class TransactionRepository {
   /// One-shot read — newest first.
   Future<List<Transaction>> getAll() => _db.getAll();
 
+  /// Approve a pending draft transaction
+  Future<void> approveTransaction(String id) => _db.approveTransaction(id);
+
+  /// Delete a transaction (reject draft or delete official transaction)
+  Future<void> deleteTransaction(String id) => _db.deleteTransaction(id);
+
+  /// Adjust the amount of a transaction and approve it
+  Future<void> updateTransactionAmount(String id, int amountVnd) =>
+      _db.updateTransactionAmount(id, amountVnd);
+
+  /// Update flexible transaction companion fields directly (e.g. amount & sign)
+  Future<void> updateTransactionCompanion(String id, TransactionsCompanion entry) =>
+      _db.updateTransactionCompanion(id, entry);
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   bool _isValid(PendingTransaction tx) {
@@ -78,5 +92,6 @@ class TransactionRepository {
         createdAt: tx.createdAt,
         syncedAt: const Value.absent(),
         rawContent: Value(tx.rawContent),
+        isDraft: const Value(true), // Mặc định là Draft đối với giao dịch kéo từ native về
       );
 }

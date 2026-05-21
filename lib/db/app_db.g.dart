@@ -91,6 +91,21 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isDraftMeta = const VerificationMeta(
+    'isDraft',
+  );
+  @override
+  late final GeneratedColumn<bool> isDraft = GeneratedColumn<bool>(
+    'is_draft',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_draft" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -101,6 +116,7 @@ class $TransactionsTable extends Transactions
     createdAt,
     syncedAt,
     rawContent,
+    isDraft,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -174,6 +190,12 @@ class $TransactionsTable extends Transactions
         rawContent.isAcceptableOrUnknown(data['raw_content']!, _rawContentMeta),
       );
     }
+    if (data.containsKey('is_draft')) {
+      context.handle(
+        _isDraftMeta,
+        isDraft.isAcceptableOrUnknown(data['is_draft']!, _isDraftMeta),
+      );
+    }
     return context;
   }
 
@@ -215,6 +237,10 @@ class $TransactionsTable extends Transactions
         DriftSqlType.string,
         data['${effectivePrefix}raw_content'],
       ),
+      isDraft: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_draft'],
+      )!,
     );
   }
 
@@ -233,6 +259,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final int createdAt;
   final int? syncedAt;
   final String? rawContent;
+  final bool isDraft;
   const Transaction({
     required this.id,
     required this.bankId,
@@ -242,6 +269,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     required this.createdAt,
     this.syncedAt,
     this.rawContent,
+    required this.isDraft,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -258,6 +286,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     if (!nullToAbsent || rawContent != null) {
       map['raw_content'] = Variable<String>(rawContent);
     }
+    map['is_draft'] = Variable<bool>(isDraft);
     return map;
   }
 
@@ -275,6 +304,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       rawContent: rawContent == null && nullToAbsent
           ? const Value.absent()
           : Value(rawContent),
+      isDraft: Value(isDraft),
     );
   }
 
@@ -292,6 +322,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       createdAt: serializer.fromJson<int>(json['createdAt']),
       syncedAt: serializer.fromJson<int?>(json['syncedAt']),
       rawContent: serializer.fromJson<String?>(json['rawContent']),
+      isDraft: serializer.fromJson<bool>(json['isDraft']),
     );
   }
   @override
@@ -306,6 +337,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'createdAt': serializer.toJson<int>(createdAt),
       'syncedAt': serializer.toJson<int?>(syncedAt),
       'rawContent': serializer.toJson<String?>(rawContent),
+      'isDraft': serializer.toJson<bool>(isDraft),
     };
   }
 
@@ -318,6 +350,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     int? createdAt,
     Value<int?> syncedAt = const Value.absent(),
     Value<String?> rawContent = const Value.absent(),
+    bool? isDraft,
   }) => Transaction(
     id: id ?? this.id,
     bankId: bankId ?? this.bankId,
@@ -327,6 +360,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     createdAt: createdAt ?? this.createdAt,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
     rawContent: rawContent.present ? rawContent.value : this.rawContent,
+    isDraft: isDraft ?? this.isDraft,
   );
   Transaction copyWithCompanion(TransactionsCompanion data) {
     return Transaction(
@@ -342,6 +376,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       rawContent: data.rawContent.present
           ? data.rawContent.value
           : this.rawContent,
+      isDraft: data.isDraft.present ? data.isDraft.value : this.isDraft,
     );
   }
 
@@ -355,7 +390,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('timestampMs: $timestampMs, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
-          ..write('rawContent: $rawContent')
+          ..write('rawContent: $rawContent, ')
+          ..write('isDraft: $isDraft')
           ..write(')'))
         .toString();
   }
@@ -370,6 +406,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     createdAt,
     syncedAt,
     rawContent,
+    isDraft,
   );
   @override
   bool operator ==(Object other) =>
@@ -382,7 +419,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.timestampMs == this.timestampMs &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt &&
-          other.rawContent == this.rawContent);
+          other.rawContent == this.rawContent &&
+          other.isDraft == this.isDraft);
 }
 
 class TransactionsCompanion extends UpdateCompanion<Transaction> {
@@ -394,6 +432,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<int> createdAt;
   final Value<int?> syncedAt;
   final Value<String?> rawContent;
+  final Value<bool> isDraft;
   final Value<int> rowid;
   const TransactionsCompanion({
     this.id = const Value.absent(),
@@ -404,6 +443,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rawContent = const Value.absent(),
+    this.isDraft = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionsCompanion.insert({
@@ -415,6 +455,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     required int createdAt,
     this.syncedAt = const Value.absent(),
     this.rawContent = const Value.absent(),
+    this.isDraft = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        bankId = Value(bankId),
@@ -431,6 +472,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<int>? createdAt,
     Expression<int>? syncedAt,
     Expression<String>? rawContent,
+    Expression<bool>? isDraft,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -442,6 +484,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (rawContent != null) 'raw_content': rawContent,
+      if (isDraft != null) 'is_draft': isDraft,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -455,6 +498,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<int>? createdAt,
     Value<int?>? syncedAt,
     Value<String?>? rawContent,
+    Value<bool>? isDraft,
     Value<int>? rowid,
   }) {
     return TransactionsCompanion(
@@ -466,6 +510,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       rawContent: rawContent ?? this.rawContent,
+      isDraft: isDraft ?? this.isDraft,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -497,6 +542,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (rawContent.present) {
       map['raw_content'] = Variable<String>(rawContent.value);
     }
+    if (isDraft.present) {
+      map['is_draft'] = Variable<bool>(isDraft.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -514,6 +562,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
           ..write('rawContent: $rawContent, ')
+          ..write('isDraft: $isDraft, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1026,6 +1075,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required int createdAt,
       Value<int?> syncedAt,
       Value<String?> rawContent,
+      Value<bool> isDraft,
       Value<int> rowid,
     });
 typedef $$TransactionsTableUpdateCompanionBuilder =
@@ -1038,6 +1088,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<int> createdAt,
       Value<int?> syncedAt,
       Value<String?> rawContent,
+      Value<bool> isDraft,
       Value<int> rowid,
     });
 
@@ -1087,6 +1138,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get rawContent => $composableBuilder(
     column: $table.rawContent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDraft => $composableBuilder(
+    column: $table.isDraft,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1139,6 +1195,11 @@ class $$TransactionsTableOrderingComposer
     column: $table.rawContent,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isDraft => $composableBuilder(
+    column: $table.isDraft,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -1177,6 +1238,9 @@ class $$TransactionsTableAnnotationComposer
     column: $table.rawContent,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isDraft =>
+      $composableBuilder(column: $table.isDraft, builder: (column) => column);
 }
 
 class $$TransactionsTableTableManager
@@ -1218,6 +1282,7 @@ class $$TransactionsTableTableManager
                 Value<int> createdAt = const Value.absent(),
                 Value<int?> syncedAt = const Value.absent(),
                 Value<String?> rawContent = const Value.absent(),
+                Value<bool> isDraft = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransactionsCompanion(
                 id: id,
@@ -1228,6 +1293,7 @@ class $$TransactionsTableTableManager
                 createdAt: createdAt,
                 syncedAt: syncedAt,
                 rawContent: rawContent,
+                isDraft: isDraft,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1240,6 +1306,7 @@ class $$TransactionsTableTableManager
                 required int createdAt,
                 Value<int?> syncedAt = const Value.absent(),
                 Value<String?> rawContent = const Value.absent(),
+                Value<bool> isDraft = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TransactionsCompanion.insert(
                 id: id,
@@ -1250,6 +1317,7 @@ class $$TransactionsTableTableManager
                 createdAt: createdAt,
                 syncedAt: syncedAt,
                 rawContent: rawContent,
+                isDraft: isDraft,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

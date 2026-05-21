@@ -20,7 +20,7 @@ class AppDb extends _$AppDb {
   AppDb.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -31,6 +31,9 @@ class AppDb extends _$AppDb {
           if (from < 3) {
             await m.addColumn(transactions, transactions.rawContent);
           }
+          if (from < 4) {
+            await m.addColumn(transactions, transactions.isDraft);
+          }
         },
       );
 
@@ -39,6 +42,28 @@ class AppDb extends _$AppDb {
   /// Insert a row; silently ignore if a row with the same [id] already exists.
   Future<void> insertTransaction(TransactionsCompanion entry) =>
       into(transactions).insert(entry, mode: InsertMode.insertOrIgnore);
+
+  /// Approve a pending draft transaction
+  Future<void> approveTransaction(String id) =>
+      (update(transactions)..where((t) => t.id.equals(id)))
+          .write(const TransactionsCompanion(isDraft: Value(false)));
+
+  /// Delete a transaction (used for rejecting/deleting drafts or verified transactions)
+  Future<void> deleteTransaction(String id) =>
+      (delete(transactions)..where((t) => t.id.equals(id))).go();
+
+  /// Update the amount of a transaction and confirm it (ends its draft state)
+  Future<void> updateTransactionAmount(String id, int amountVnd) =>
+      (update(transactions)..where((t) => t.id.equals(id))).write(
+        TransactionsCompanion(
+          amountVnd: Value(amountVnd),
+          isDraft: const Value(false),
+        ),
+      );
+
+  /// Update transaction companion fields directly (flexible update)
+  Future<void> updateTransactionCompanion(String id, TransactionsCompanion entry) =>
+      (update(transactions)..where((t) => t.id.equals(id))).write(entry);
 
   // ── Transaction reads ─────────────────────────────────────────────────────
 
