@@ -56,9 +56,7 @@ class AndroidNotificationStep extends StatelessWidget {
           icon: Icons.notifications_outlined,
           title: 'Truy cập thông báo',
           body: 'App cần đọc thông báo từ ứng dụng ngân hàng để tự động '
-              'ghi nhận khi bạn chi tiêu.\n\n'
-              'Dữ liệu được mã hoá và chỉ lưu trên thiết bị của bạn — '
-              'không gửi ra ngoài.',
+              'ghi nhận khi bạn chi tiêu.',
         ),
         const SizedBox(height: 20),
         const OnboardingInfoRow(icon: Icons.lock_outline,     text: 'Không gửi dữ liệu ra ngoài'),

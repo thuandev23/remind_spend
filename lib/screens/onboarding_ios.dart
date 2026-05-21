@@ -56,6 +56,8 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
 
   bool _permissionRequesting = false;
   bool _detecting = false;
+  bool _showEnglishGuide = false;
+  bool _initializing = true; // State to track initialization check
 
   Set<String> _detectedIds = {};
   Set<String> _selectedIds = {};
@@ -63,13 +65,29 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
   @override
   void initState() {
     super.initState();
+    _verifyStartedAt = DateTime.now();
     _checkInitialPermission();
   }
 
   Future<void> _checkInitialPermission() async {
     final status = await BridgeService.checkPermissionStatus();
-    if (status == PermissionStatus.granted && mounted) {
-      _advanceFromPermission();
+    if (!mounted) return;
+    
+    if (status == PermissionStatus.granted) {
+      // If already granted, instantly check installed finance apps and advance
+      final detected = await BridgeService.detectInstalledFinanceApps();
+      if (!mounted) return;
+      setState(() {
+        _detectedIds = detected.toSet();
+        _selectedIds = detected.toSet();
+        _step = detected.isNotEmpty ? _Step.selectApps : _Step.setupAutomation;
+        _initializing = false;
+      });
+    } else {
+      // Not granted, show the permission screen
+      setState(() {
+        _initializing = false;
+      });
     }
   }
 
@@ -165,6 +183,17 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
 
   @override
   Widget build(BuildContext context) {
+    if (_initializing) {
+      return const SizedBox(
+        height: 200,
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A1A1A)),
+          ),
+        ),
+      );
+    }
+
     return switch (_step) {
       _Step.notifPermission => _buildNotifPermission(),
       _Step.selectApps => _buildSelectApps(),
@@ -355,51 +384,261 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
         _AutomationHeader(
           icon: Icons.notifications_outlined,
           title: 'Thiết lập Tự động hóa',
-          subtitle: 'Cho: $names',
+          subtitle: 'Áp dụng cho: $names',
           badge: 'iOS 18+',
         ),
         const SizedBox(height: 20),
-        _ChecklistCard(
-          items: const [
-            'Tải phím tắt "Log Bank Transaction" qua link bên dưới.',
-            'Vào tab Tự động hóa → Thêm (+).',
-            'Chọn "Thông báo từ ứng dụng" → Chọn các app của bạn.',
-            'Hành động: chạy "Log Bank Transaction".',
-            'Truyền đầu vào là [Nội dung thông báo].',
-            'Tắt "Hỏi trước khi chạy" → Lưu.',
-          ],
+        
+        // ── iCloud Shortcut Download Card ───────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2C3E50), Color(0xFF000000)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bước 1: Tải Phím tắt mẫu',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Tải phím tắt "Log Bank Transaction" từ iCloud',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    // Mở iCloud Link tải shortcut thật
+                    const url = 'https://www.icloud.com/shortcuts/24ef3ab2330a47d2bb34e16d48259dfb'; // iCloud URL của Shortcut mẫu
+                    // Gọi qua bridge_service hoặc launchUrl
+                    // Trong context này, ta có thể copy link hoặc mở trực tiếp
+                    Clipboard.setData(const ClipboardData(text: url));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('🔗 Đã sao chép liên kết iCloud Shortcut vào bộ nhớ tạm!'),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                    // Mở safari để cài đặt phím tắt
+                    await BridgeService.requestPermission(); // Mở Shortcuts app trực tiếp
+                  },
+                  icon: const Icon(Icons.install_mobile_rounded, size: 18),
+                  label: const Text(
+                    'Cài đặt Phím tắt từ iCloud',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF1A1A1A),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Colors.amber, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _showEnglishGuide
+                            ? 'Important: Open the downloaded Shortcut -> Ensure the "Message Text" field is bound to the blue "Shortcut Input" variable to receive dynamic messages.'
+                            : 'Lưu ý quan trọng: Mở Phím tắt vừa tải -> Đảm bảo ô "Message Text" đã được gán biến "Phím tắt đầu vào" (Shortcut Input) màu xanh dương để nhận tin nhắn động tự động.',
+                        style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        _buildSmsTestCard(),
         const SizedBox(height: 20),
-        _OpenShortcutsButton(onTap: _openShortcuts),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _verifying ? null : _verifyAndFinish,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1A1A1A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+
+        // ── Step 2: Automation Guide (Prioritizing Vietnamese) ──────────────────
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(
+              child: Text(
+                'Bước 2: Tạo Tự động hóa (Automation)',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A1A),
+                ),
               ),
             ),
-            child: _verifying
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'Đã setup → Kiểm tra',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            const SizedBox(width: 8), // Khoảng cách nhỏ giữa tiêu đề và nút bấm
+            // Nút chuyển đổi ngôn ngữ tinh tế
+            GestureDetector(
+              onTap: () => setState(() => _showEnglishGuide = !_showEnglishGuide),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F2F7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE5E5EA)),
+                ),
+                child: Text(
+                  _showEnglishGuide ? '🇻🇳 Tiếng Việt' : '🇬🇧 English Guide',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3C72),
                   ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        
+        // Hiển thị checklist tương ứng dựa trên state (Mặc định là Tiếng Việt)
+        _showEnglishGuide
+            ? _ChecklistCard(
+                items: const [
+                  'Open Shortcuts app -> Go to "Automation" tab -> Tap (+).',
+                  'Select "Message" trigger (perfect for bank transaction SMS).',
+                  'Sender: Select your bank sender, or Contains: enter "GD" or "VND".',
+                  'Select "Run Immediately" (Crucial!). Turn off "Notify When Run".',
+                  'Tap Next -> Choose "New Blank Automation" -> Tap "Add Action".',
+                  'Search and add "Run Shortcut" -> Select "Log Bank Transaction".',
+                  'Expand action details -> Set Shortcut Input to the incoming "Message".'
+                ],
+              )
+            : _ChecklistCard(
+                items: const [
+                  'Mở app Phím tắt (Shortcuts) -> chọn tab Tự động hóa -> bấm (+).',
+                  'Chọn tác vụ kích hoạt "Tin nhắn" (Message) (để bắt SMS biến động số dư).',
+                  'Mục Người gửi: chọn ngân hàng của bạn, hoặc mục Chứa: nhập "GD" hoặc "VND".',
+                  'Mục Thời điểm chạy: CHỌN "Chạy ngay lập tức" (Run Immediately). Tắt "Thông báo khi chạy".',
+                  'Nhấn Tiếp tục -> Chọn "Tự động hóa trống mới" -> Thêm tác vụ.',
+                  'Tìm tác vụ "Chạy phím tắt" (Run Shortcut) -> Chọn phím tắt "Log Bank Transaction".',
+                  'Bấm mở rộng chi tiết tác vụ -> ở mục Đầu vào (Input), chọn "Tin nhắn" -> "Văn bản" (Text).'
+                ],
+              ),
+        const SizedBox(height: 20),
+
+        // ── Test & Verify Area ──────────────────────────────────────────────────
+        const Text(
+          'Bước 3: Chạy thử & Xác nhận kết nối',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A1A),
           ),
+        ),
+        const SizedBox(height: 10),
+        _buildSmsTestCard(),
+        const SizedBox(height: 24),
+        
+        Row(
+          children: [
+            Expanded(
+              flex: 4,
+              child: SizedBox(
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: _openShortcuts,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('Mở Phím tắt'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1A1A1A),
+                    side: const BorderSide(color: Color(0xFF1A1A1A), width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 6,
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _verifying ? null : _verifyAndFinish,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: _verifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Kiểm tra kết nối',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -409,15 +648,16 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F0EE),
+        color: const Color(0xFFF5F5F7),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E5EA)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Chạy thử shortcut với nội dung mẫu:',
-            style: TextStyle(fontSize: 13, color: Color(0xFF5A5A5A)),
+            'Sao chép chuỗi tin nhắn giao dịch mẫu dưới đây:',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5A5A5A)),
           ),
           const SizedBox(height: 8),
           Container(
@@ -450,7 +690,7 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
                     );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Đã copy nội dung mẫu'),
+                        content: Text('📋 Đã copy nội dung mẫu vào bộ nhớ tạm'),
                         duration: Duration(seconds: 1),
                       ),
                     );
@@ -472,16 +712,17 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           const Text(
-            'Mở Phím tắt → chạy "Log Bank Transaction" → dán nội dung trên → quay lại bấm Kiểm tra.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+            '💡 Hướng dẫn chạy thử: Mở app Phím tắt -> Bấm chạy Shortcut "Log Bank Transaction" -> Dán tin nhắn trên -> Quay lại app bấm "Kiểm tra kết nối".',
+            style: TextStyle(fontSize: 11, color: Color(0xFF8A8A8A), height: 1.3),
           ),
         ],
       ),
     );
   }
 }
+
 
 // ── Shared sub-widgets ────────────────────────────────────────────────────────
 
@@ -515,31 +756,6 @@ class _ReasonRow extends StatelessWidget {
   }
 }
 
-class _OpenShortcutsButton extends StatelessWidget {
-  final Future<void> Function() onTap;
-  const _OpenShortcutsButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: const Icon(Icons.open_in_new, size: 16),
-        label: const Text('Mở app Phím tắt'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF1A1A1A),
-          side: const BorderSide(color: Color(0xFF1A1A1A)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-}
 
 class _AutomationHeader extends StatelessWidget {
   final IconData icon;

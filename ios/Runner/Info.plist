@@ -46,7 +46,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>ShortcutInstallURL</key>
-	<string></string>
+	<string>https://www.icloud.com/shortcuts/24ef3ab2330a47d2bb34e16d48259dfb</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>momo</string>
