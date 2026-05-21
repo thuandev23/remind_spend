@@ -234,6 +234,17 @@ class BridgeService {
     }
   }
 
+  // iOS only: last raw text received by the intent extension.
+  static Future<String?> getLastReceivedText() async {
+    try {
+      return await _channel.invokeMethod<String>('getLastReceivedText');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (e) {
+      return e.message;
+    }
+  }
+
   // iOS only: returns list of bankIds for finance apps detected as installed.
   // Uses canOpenURL — no permission needed, silent check.
   static Future<List<String>> detectInstalledFinanceApps() async {

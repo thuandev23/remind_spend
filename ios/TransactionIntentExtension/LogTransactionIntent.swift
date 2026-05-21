@@ -23,13 +23,16 @@ struct LogTransactionIntent: AppIntent {
     var messageText: String
 
     func perform() async throws -> some IntentResult {
+        let defaults = UserDefaults(suiteName: "group.com.example.remind_spend")
+        defaults?.set(messageText, forKey: "last_received_text")
+
         // Tier 1: dynamic rules from App Group UserDefaults (pushed by RemoteConfigService).
         // Tier 2: hardcoded BankRegexParser fallback.
         guard let parsed = parseDynamic(text: messageText) ?? BankRegexParser.parse(text: messageText) else {
             // Not a transaction message we recognise — silent success so Shortcuts doesn't error.
+            NSLog("[LogTransactionIntent] Text did not match any regex: \(messageText)")
             return .result()
         }
-
 
         let nowMs = Int64(Date().timeIntervalSince1970 * 1_000)
         let payload = TransactionPayload(
@@ -47,14 +50,13 @@ struct LogTransactionIntent: AppIntent {
             try KeychainQueue.shared.enqueue(payload)
         } catch {
             NSLog("[LogTransactionIntent] enqueue FAILED: \(error)")
-            let defaults = UserDefaults(suiteName: "group.com.example.remind_spend")
             defaults?.set("[\(Date())] \(error.localizedDescription)", forKey: "last_extension_error")
             return .result()
         }
         NSLog("[LogTransactionIntent] enqueue done")
 
         // Clear any previous error on success.
-        UserDefaults(suiteName: "group.com.example.remind_spend")?.removeObject(forKey: "last_extension_error")
+        defaults?.removeObject(forKey: "last_extension_error")
 
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),

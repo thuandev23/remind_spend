@@ -18,6 +18,8 @@ import androidx.core.content.ContextCompat
 import com.example.remind_spend.config.BankRule
 import com.example.remind_spend.config.RegexConfigLoader
 import com.example.remind_spend.db.AppDatabase
+import com.example.remind_spend.db.IdempotencyEntry
+import com.example.remind_spend.db.PendingTransaction
 import com.example.remind_spend.db.RegexConfigEntry
 import com.example.remind_spend.notification.LocalNotificationHelper
 import com.example.remind_spend.notification.TransactionEventBus
@@ -127,6 +129,8 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             "updateRegexConfig"                      -> handleUpdateRegexConfig(call, result)
             "clearIdempotencyCache"                  -> handleClearIdempotencyCache(result)
             "requestPostNotificationsPermission"     -> handleRequestPostNotificationsPermission(result)
+            "mockTransaction"                        -> handleMockTransaction(call, result)
+            "simulateBankNotification"               -> handleSimulateBankNotification(call, result)
             else                                     -> result.notImplemented()
         }
     }
@@ -274,6 +278,84 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             arrayOf(Manifest.permission.POST_NOTIFICATIONS),
             REQUEST_CODE_POST_NOTIF
         )
+    }
+
+    private fun handleMockTransaction(call: MethodCall, result: MethodChannel.Result) {
+        pluginScope.launch {
+            runCatching {
+                val nowMs = System.currentTimeMillis()
+                val id = "mock_$nowMs"
+                db.pendingTransactionDao().enqueue(
+                    PendingTransaction(
+                        id = id,
+                        packageName = "com.VCB",
+                        bankId = "vcb",
+                        rawAmount = 150000L,
+                        sign = "debit",
+                        encryptedContent = securityManager.encrypt("Mock transaction: -150,000 VND"),
+                        timestampMs = nowMs,
+                        createdAt = nowMs
+                    )
+                )
+                TransactionEventBus.notifyNewTransaction()
+            }.fold(
+                onSuccess = { withContext(Dispatchers.Main) { result.success(null) } },
+                onFailure = { e ->
+                    withContext(Dispatchers.Main) {
+                        result.error("MOCK_ERROR", e.message, null)
+                    }
+                }
+            )
+        }
+    }
+
+    private fun handleSimulateBankNotification(call: MethodCall, result: MethodChannel.Result) {
+        val text = call.arguments as? String ?: return result.error("BAD_ARGS", "SMS text required", null)
+        
+        pluginScope.launch {
+            runCatching {
+                // Try to find a rule that matches this text across ALL known rules
+                val rules = RegexConfigLoader.hardcodedRules // Using hardcoded for simplicity in simulation
+                var matchedRule: BankRule? = null
+                var amount: Long? = null
+                
+                for (rule in rules) {
+                    val a = RegexConfigLoader.parseAmount(text, rule)
+                    if (a != null) {
+                        matchedRule = rule
+                        amount = a
+                        break
+                    }
+                }
+
+                if (matchedRule == null || amount == null) {
+                    withContext(Dispatchers.Main) { result.success(false) }
+                    return@launch
+                }
+
+                val nowMs = System.currentTimeMillis()
+                val id = "sim_$nowMs"
+                
+                db.pendingTransactionDao().enqueue(
+                    PendingTransaction(
+                        id = id,
+                        packageName = matchedRule.packageNames.firstOrNull() ?: "com.simulated",
+                        bankId = matchedRule.bankId,
+                        rawAmount = amount,
+                        sign = matchedRule.sign,
+                        encryptedContent = securityManager.encrypt(text),
+                        timestampMs = nowMs,
+                        createdAt = nowMs
+                    )
+                )
+                TransactionEventBus.notifyNewTransaction()
+                withContext(Dispatchers.Main) { result.success(true) }
+            }.onFailure { e ->
+                withContext(Dispatchers.Main) {
+                    result.error("SIM_ERROR", e.message, null)
+                }
+            }
+        }
     }
 
     // ── ActivityAware ─────────────────────────────────────────────────────────

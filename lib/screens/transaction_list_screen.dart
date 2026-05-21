@@ -546,6 +546,29 @@ class _DebugSheetState extends State<_DebugSheet> {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () async {
+                  final text = await BridgeService.getLastReceivedText();
+                  if (!context.mounted) return;
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Last Received Text'),
+                      content: Text(text ?? 'No text received yet.'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('OK'))
+                      ],
+                    ),
+                  );
+                },
+                child: const Text('📝 Last received text'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
                   final info = await BridgeService.debugKeychainPeek();
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -557,61 +580,58 @@ class _DebugSheetState extends State<_DebugSheet> {
               ),
             ),
           ],
-          // iOS-only: simulate bank SMS notification (equivalent of ADB broadcast on Android)
-          if (kDebugMode && Platform.isIOS) ...[
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 12),
-            const Text(
-              'Simulate bank notification (iOS)',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+          const Text(
+            'Simulate bank notification',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Chạy qua BankRegexParser → PendingTransaction.\nKiểm tra flow nhận diện SMS và hiển thị UI.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: _presets.map((p) => ActionChip(
+              label: Text(p.$1, style: const TextStyle(fontSize: 11)),
+              padding: EdgeInsets.zero,
+              onPressed: () => _smsController.text = p.$2,
+            )).toList(),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _smsController,
+            decoration: InputDecoration(
+              labelText: 'SMS text',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Chạy qua BankRegexParser → KeychainQueue.\nTương đương ADB broadcast trên Android.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: _presets.map((p) => ActionChip(
-                label: Text(p.$1, style: const TextStyle(fontSize: 11)),
-                padding: EdgeInsets.zero,
-                onPressed: () => _smsController.text = p.$2,
-              )).toList(),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _smsController,
-              decoration: InputDecoration(
-                labelText: 'SMS text',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            maxLines: 3,
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _simulating ? null : _simulate,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A1A1A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              maxLines: 3,
-              style: const TextStyle(fontSize: 13),
+              child: _simulating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Simulate'),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _simulating ? null : _simulate,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A1A1A),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: _simulating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Simulate'),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );

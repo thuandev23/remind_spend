@@ -126,6 +126,11 @@ final class IOSBridgePlugin: NSObject {
                 .string(forKey: "last_extension_error")
             result(err)
 
+        case "getLastReceivedText":
+            let text = UserDefaults(suiteName: "group.com.example.remind_spend")?
+                .string(forKey: "last_received_text")
+            result(text)
+
         case "debugKeychainPeek":
             handleDebugKeychainPeek(result: result)
 
