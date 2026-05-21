@@ -20,7 +20,7 @@ class AppDb extends _$AppDb {
   AppDb.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -33,6 +33,9 @@ class AppDb extends _$AppDb {
           }
           if (from < 4) {
             await m.addColumn(transactions, transactions.isDraft);
+          }
+          if (from < 5) {
+            await m.addColumn(transactions, transactions.categoryId);
           }
         },
       );

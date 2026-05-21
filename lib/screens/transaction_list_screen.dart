@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
 import '../db/app_db.dart';
+import '../models/category.dart';
 import '../repositories/transaction_repository.dart';
 import '../services/bridge_service.dart';
 import '../services/pull_service.dart';
+import '../services/gemini_service.dart';
 import 'onboarding_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,18 +301,38 @@ class _TransactionListScreenState extends State<TransactionListScreen>
               ),
             ),
           )
-        else
+        else ...[
           IconButton(
             icon: const Icon(Icons.sync, color: Color(0xFF1A1A1A)),
             tooltip: 'Đồng bộ ngay',
             onPressed: _manualPull,
           ),
-        IconButton(
-          icon: const Icon(Icons.bug_report_outlined, color: Color(0xFF8A8A8A)),
-          tooltip: 'Debug simulator',
-          onPressed: _showDebugSheet,
-        ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Color(0xFF1A1A1A)),
+            tooltip: 'Cài đặt AI',
+            onPressed: _showSettingsDialog,
+          ),
+        ],
+        // IconButton(
+        //   icon: const Icon(Icons.bug_report_outlined, color: Color(0xFF8A8A8A)),
+        //   tooltip: 'Debug simulator',
+        //   onPressed: _showDebugSheet,
+        // ),
       ],
+    );
+  }
+
+  Future<void> _showSettingsDialog() async {
+    final hasKey = await GeminiService.getApiKey();
+    final enabled = await GeminiService.isAiEnabled();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => _GeminiSettingsDialog(
+        initialApiKey: hasKey ?? '',
+        initialEnabled: enabled,
+      ),
     );
   }
 
@@ -710,14 +732,28 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.edit_note, size: 12, color: Color(0xFF1E3C72)),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Nhấn để sửa số tiền • $timeStr',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF1E3C72), fontWeight: FontWeight.w700),
+                    _CategoryBadge(
+                      category: AppCategory.fromId(tx.categoryId, sign: tx.sign),
+                      isAiPending: tx.categoryId == 'others',
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit_note, size: 12, color: Color(0xFF1E3C72)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Nhấn để sửa • $timeStr',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF1E3C72), fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -792,7 +828,10 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                           ),
                         _AnimatedNewItem(
                           animate: _animatingIds.contains(items[i].id),
-                          child: _ConfirmedTransactionTile(tx: items[i]),
+                          child: _ConfirmedTransactionTile(
+                            tx: items[i],
+                            onTapCategory: () => _showCategoryPickerSheet(items[i]),
+                          ),
                         ),
                       ],
                     ],
@@ -918,6 +957,7 @@ class _TransactionListScreenState extends State<TransactionListScreen>
   void _showEditBottomSheet(Transaction tx) {
     final amountController = TextEditingController(text: tx.amountVnd.toString());
     String selectedSign = tx.sign;
+    String? selectedCategoryId = tx.categoryId;
     
     showModalBottomSheet(
       context: context,
@@ -1025,7 +1065,14 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                                       ),
                                     ),
                                     onSelected: (val) {
-                                      if (val) setStateSheet(() => selectedSign = 'debit');
+                                      if (val) {
+                                        setStateSheet(() {
+                                          selectedSign = 'debit';
+                                          if (selectedCategoryId == 'income') {
+                                            selectedCategoryId = 'others';
+                                          }
+                                        });
+                                      }
                                     },
                                   ),
                                 ),
@@ -1051,7 +1098,12 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                                       ),
                                     ),
                                     onSelected: (val) {
-                                      if (val) setStateSheet(() => selectedSign = 'credit');
+                                      if (val) {
+                                        setStateSheet(() {
+                                          selectedSign = 'credit';
+                                          selectedCategoryId = 'income';
+                                        });
+                                      }
                                     },
                                   ),
                                 ),
@@ -1088,6 +1140,58 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'DANH MỤC GIAO DỊCH:',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey[500], letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: AppCategory.values.map((cat) {
+                      final isSelected = selectedCategoryId == cat.id;
+                      return InkWell(
+                        onTap: () {
+                          setStateSheet(() {
+                            selectedCategoryId = cat.id;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? cat.color.withValues(alpha: 0.15) : Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? cat.color : Colors.grey[300]!,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                cat.icon,
+                                size: 16,
+                                color: isSelected ? cat.color : Colors.grey[600],
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                cat.nameVi,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                  color: isSelected ? cat.color : Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -1127,10 +1231,11 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                             }
                             Navigator.pop(context);
                             
-                            // Tạo Companion để update cả amount, sign và isDraft
+                            // Tạo Companion để update cả amount, sign, categoryId và isDraft
                             final companion = TransactionsCompanion(
                               amountVnd: drift.Value(intVal),
                               sign: drift.Value(selectedSign),
+                              categoryId: drift.Value(selectedCategoryId),
                               isDraft: const drift.Value(false),
                             );
                             
@@ -1152,6 +1257,143 @@ class _TransactionListScreenState extends State<TransactionListScreen>
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  Future<void> _updateTransactionCategory(String id, String catId) async {
+    await _repo.updateTransactionCompanion(
+      id,
+      TransactionsCompanion(categoryId: drift.Value(catId)),
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Đã cập nhật danh mục thành công!'),
+          backgroundColor: Color(0xFF1E3C72),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  void _showCategoryPickerSheet(Transaction tx) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final currentCat = AppCategory.fromId(tx.categoryId, sign: tx.sign);
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3C72).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.category_outlined, color: Color(0xFF1E3C72), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Phân loại giao dịch',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A1A1A)),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_bankName(tx.bankId)} • ${_formatAmount(tx.amountVnd)}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 4,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.85,
+                children: AppCategory.values.map((cat) {
+                  final isSelected = currentCat.id == cat.id;
+                  return InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _updateTransactionCategory(tx.id, cat.id);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: isSelected ? cat.color.withValues(alpha: 0.15) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected ? cat.color : Colors.grey[200]!,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? cat.color : cat.color.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              cat.icon,
+                              size: 20,
+                              color: isSelected ? Colors.white : cat.color,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            cat.nameVi,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                              color: isSelected ? cat.color : Colors.grey[700],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -1197,6 +1439,7 @@ class _TransactionListScreenState extends State<TransactionListScreen>
     };
   }
 
+  // ignore: unused_element
   void _showDebugSheet() {
     showModalBottomSheet(
       context: context,
@@ -1468,7 +1711,12 @@ class _AnimatedNewItem extends StatelessWidget {
 
 class _ConfirmedTransactionTile extends StatelessWidget {
   final Transaction tx;
-  const _ConfirmedTransactionTile({required this.tx});
+  final VoidCallback? onTapCategory;
+
+  const _ConfirmedTransactionTile({
+    required this.tx,
+    this.onTapCategory,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1482,6 +1730,8 @@ class _ConfirmedTransactionTile extends StatelessWidget {
     
     // Kiểm tra xem đây có phải là giao dịch tự động không (có rawContent)
     final isAutomated = tx.rawContent != null;
+
+    final category = AppCategory.fromId(tx.categoryId, sign: tx.sign);
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1525,9 +1775,19 @@ class _ConfirmedTransactionTile extends StatelessWidget {
           ],
         ],
       ),
-      subtitle: Text(
-        timeStr,
-        style: const TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+      subtitle: Row(
+        children: [
+          Text(
+            timeStr,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+          ),
+          const SizedBox(width: 8),
+          _CategoryBadge(
+            category: category,
+            onTap: onTapCategory,
+            isAiPending: tx.categoryId == 'others',
+          ),
+        ],
       ),
       trailing: Text(
         '$amountPrefix$formattedAmount',
@@ -1564,6 +1824,135 @@ class _ConfirmedTransactionTile extends StatelessWidget {
       'zalopay' => 'ZaloPay',
       _ => bankId.toUpperCase(),
     };
+  }
+}
+
+// ─── Category Badge Widget ───────────────────────────────────────────────────
+
+class _CategoryBadge extends StatefulWidget {
+  final AppCategory category;
+  final VoidCallback? onTap;
+  final bool isAiPending;
+
+  const _CategoryBadge({
+    required this.category,
+    this.onTap,
+    this.isAiPending = false,
+  });
+
+  @override
+  State<_CategoryBadge> createState() => _CategoryBadgeState();
+}
+
+class _CategoryBadgeState extends State<_CategoryBadge> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isAiPending) {
+      return InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: widget.category.color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: widget.category.color.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.category.icon,
+                size: 11,
+                color: widget.category.color,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.category.nameVi,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: widget.category.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFF1E3C72).withValues(alpha: 0.2),
+              width: 1,
+            ),
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFFF2F2F7),
+                const Color(0xFFE5E5EA),
+                const Color(0xFFF2F2F7),
+              ],
+              stops: [
+                (_animation.value - 0.5).clamp(0.0, 1.0),
+                _animation.value.clamp(0.0, 1.0),
+                (_animation.value + 0.5).clamp(0.0, 1.0),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.psychology_rounded,
+                size: 11,
+                color: Color(0xFF1E3C72),
+              ),
+              SizedBox(width: 4),
+              Text(
+                'AI Phân loại...',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E3C72),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -1806,6 +2195,339 @@ class _DebugRow extends StatelessWidget {
           ),
           Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A))),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _GeminiSettingsDialog
+//
+// Modern Dialog cấu hình Gemini API Key & bật/tắt AI Auto-Categorization
+// ─────────────────────────────────────────────────────────────────────────────
+class _GeminiSettingsDialog extends StatefulWidget {
+  final String initialApiKey;
+  final bool initialEnabled;
+
+  const _GeminiSettingsDialog({
+    required this.initialApiKey,
+    required this.initialEnabled,
+  });
+
+  @override
+  State<_GeminiSettingsDialog> createState() => _GeminiSettingsDialogState();
+}
+
+class _GeminiSettingsDialogState extends State<_GeminiSettingsDialog> {
+  late final TextEditingController _keyCont;
+  late bool _enabled;
+  bool _obscureText = true;
+  bool _testing = false;
+  String? _testResult; // 'success', 'fail' hoặc null
+
+  @override
+  void initState() {
+    super.initState();
+    _keyCont = TextEditingController(text: widget.initialApiKey);
+    _enabled = widget.initialEnabled;
+  }
+
+  @override
+  void dispose() {
+    _keyCont.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testConnection() async {
+    final key = _keyCont.text.trim();
+    if (key.isEmpty) {
+      setState(() {
+        _testResult = 'fail';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Vui lòng nhập API Key trước khi kiểm tra!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+
+    final ok = await GeminiService.testConnection(key);
+
+    if (mounted) {
+      setState(() {
+        _testing = false;
+        _testResult = ok ? 'success' : 'fail';
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    final key = _keyCont.text.trim();
+    
+    if (_enabled && key.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Vui lòng nhập API Key để kích hoạt AI Auto-Categorization!'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await GeminiService.setAiEnabled(_enabled);
+    if (key.isNotEmpty) {
+      await GeminiService.saveApiKey(key);
+    } else {
+      await GeminiService.deleteApiKey();
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Đã lưu cấu hình AI thành công!'),
+          backgroundColor: Color(0xFF43A047),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: Colors.white,
+      elevation: 10,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3C72).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.smart_toy_outlined,
+                      color: Color(0xFF1E3C72),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'AI Auto-Categorization',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A1A1A),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Sử dụng sức mạnh của Gemini AI để tự động gán chính xác các danh mục chi tiêu (Ăn uống, Di chuyển, Mua sắm...) cho những tin nhắn biến động số dư phức tạp.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFEEEEEE)),
+              
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Kích hoạt AI Auto-Categorization',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+                subtitle: const Text(
+                  'Tự động phân tích khi tin nhắn không khớp từ khóa cục bộ',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF8A8A8A)),
+                ),
+                // ignore: deprecated_member_use
+                activeColor: const Color(0xFF1E3C72),
+                value: _enabled,
+                onChanged: (val) {
+                  setState(() {
+                    _enabled = val;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              Text(
+                'Gemini API Key',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: _enabled ? const Color(0xFF1A1A1A) : Colors.grey[400],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _keyCont,
+                enabled: _enabled,
+                obscureText: _obscureText,
+                style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  hintText: 'Sử dụng API Key mặc định của hệ thống',
+                  hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12, fontStyle: FontStyle.italic),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  filled: true,
+                  fillColor: _enabled ? const Color(0xFFF8F9FA) : const Color(0xFFEEEEEE),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF1E3C72), width: 1.5),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureText ? Icons.visibility_off : Icons.visibility,
+                      color: _enabled ? const Color(0xFF8A8A8A) : Colors.grey[400],
+                      size: 20,
+                    ),
+                    onPressed: _enabled
+                        ? () {
+                            setState(() {
+                              _obscureText = !_obscureText;
+                            });
+                          }
+                        : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              if (_enabled) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _testing ? null : _testConnection,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        foregroundColor: const Color(0xFF1E3C72),
+                      ),
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: Color(0xFF1E3C72),
+                              ),
+                            )
+                          : const Icon(Icons.wifi_tethering, size: 16),
+                      label: Text(
+                        _testing ? 'Đang kết nối...' : 'Kiểm tra kết nối',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (_testResult == 'success')
+                      const Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Color(0xFF43A047), size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Kết nối tốt!',
+                            style: TextStyle(
+                              color: Color(0xFF43A047),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (_testResult == 'fail')
+                      const Row(
+                        children: [
+                          Icon(Icons.error, color: Color(0xFFE53935), size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Lỗi kết nối!',
+                            style: TextStyle(
+                              color: Color(0xFFE53935),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              
+              const Divider(color: Color(0xFFEEEEEE)),
+              const SizedBox(height: 8),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF8A8A8A),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                    child: const Text(
+                      'Hủy',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3C72),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Lưu cấu hình',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -9,10 +9,23 @@ import 'services/background_pull_worker.dart';
 import 'services/bridge_service.dart';
 import 'services/pull_service.dart';
 import 'services/remote_config_service.dart';
+import 'services/gemini_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Tự động cấu hình sẵn Gemini API Key thật của người dùng cho lần đầu khởi chạy
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final initialized = prefs.getBool('default_gemini_key_initialized') ?? false;
+    if (!initialized) {
+      await GeminiService.saveApiKey('AIzaSyADv4-sl-zyeOZPKuJXbJ0xWISlKWgA9OA');
+      await prefs.setBool('default_gemini_key_initialized', true);
+    }
+  } catch (e) {
+    // Bọc an toàn để tránh block quá trình khởi chạy app nếu Secure Storage lỗi
+  }
 
   final db = AppDb();
   final repo = TransactionRepository(db);

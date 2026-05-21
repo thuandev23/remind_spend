@@ -20,6 +20,9 @@ class Transactions extends Table {
   // Mới thêm: Trạng thái Draft (Needs Review) để phân biệt giao dịch tự động chưa duyệt
   BoolColumn get isDraft => boolean().withDefault(const Constant(false))();
 
+  // Cột mới để phân loại danh mục
+  TextColumn get categoryId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

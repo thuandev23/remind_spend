@@ -40,6 +40,10 @@ class IosShortcutStep extends StatefulWidget {
   final VoidCallback onVerified;
   final PullService? pullService;
 
+  // Static flag to bypass the async checkPermissionStatus during tests,
+  // preventing async initialization frames that break widget tests.
+  static bool bypassInitialPermissionCheck = false;
+
   const IosShortcutStep({
     super.key,
     required this.onGrant,
@@ -57,7 +61,7 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
   bool _permissionRequesting = false;
   bool _detecting = false;
   bool _showEnglishGuide = false;
-  bool _initializing = true; // State to track initialization check
+  late bool _initializing; // Change to late bool
 
   Set<String> _detectedIds = {};
   Set<String> _selectedIds = {};
@@ -65,8 +69,11 @@ class _IosShortcutStepState extends State<IosShortcutStep> {
   @override
   void initState() {
     super.initState();
+    _initializing = !IosShortcutStep.bypassInitialPermissionCheck;
     _verifyStartedAt = DateTime.now();
-    _checkInitialPermission();
+    if (_initializing) {
+      _checkInitialPermission();
+    }
   }
 
   Future<void> _checkInitialPermission() async {

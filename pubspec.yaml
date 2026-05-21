@@ -28,6 +28,9 @@ dependencies:
   # Remote config fetch
   http: ^1.2.2
 
+  # Gemini API package for generative AI auto-categorization
+  google_generative_ai: ^0.4.0
+
   # Background periodic pull (Android WorkManager + iOS BGTaskScheduler)
   workmanager: ^0.9.0
 
