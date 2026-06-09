@@ -119,7 +119,7 @@ class BankNotificationListener : NotificationListenerService() {
                     )
                 )
                 if (rowId != -1L) {
-                    Log.i(TAG, "Enqueued: $matchedBankId ${matchedAmount}đ [$matchedSign]")
+                    Log.i(TAG, "Enqueued: $matchedBankId [REDACTED] [$matchedSign]")
                     LocalNotificationHelper.show(applicationContext, matchedBankId, matchedAmount, matchedSign)
                     TransactionEventBus.notifyNewTransaction()
                 }

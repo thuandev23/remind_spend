@@ -66,6 +66,7 @@ class SecurityManager(context: Context) {
     // STABLE: generate 1 lần, lưu vào EncryptedSharedPreferences
     // Các lần sau đọc ra đúng passphrase cũ → SQLCipher mở được DB
 
+    @Synchronized
     fun getDatabasePassphrase(): ByteArray {
         val existing = encryptedPrefs.getString(PREF_DB_PASSPHRASE, null)
         if (existing != null) {
