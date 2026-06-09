@@ -305,16 +305,16 @@ class _TransactionListScreenState extends State<TransactionListScreen>
             ),
           )
         else ...[
-          IconButton(
-            icon: const Icon(Icons.sync, color: Color(0xFF1A1A1A)),
-            tooltip: 'Đồng bộ ngay',
-            onPressed: _manualPull,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Color(0xFF1A1A1A)),
-            tooltip: 'Cài đặt AI',
-            onPressed: _showSettingsDialog,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.sync, color: Color(0xFF1A1A1A)),
+          //   tooltip: 'Đồng bộ ngay',
+          //   onPressed: _manualPull,
+          // ),
+          // IconButton(
+          //   icon: const Icon(Icons.settings_outlined, color: Color(0xFF1A1A1A)),
+          //   tooltip: 'Cài đặt AI',
+          //   onPressed: _showSettingsDialog,
+          // ),
         ],
         // IconButton(
         //   icon: const Icon(Icons.bug_report_outlined, color: Color(0xFF8A8A8A)),
@@ -421,23 +421,23 @@ class _TransactionListScreenState extends State<TransactionListScreen>
                   letterSpacing: 1.2,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.bolt, color: Colors.amber, size: 12),
-                    SizedBox(width: 4),
-                    Text(
-                      'Realtime ⚡',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
+              // Container(
+              //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              //   decoration: BoxDecoration(
+              //     color: Colors.white.withValues(alpha: 0.12),
+              //     borderRadius: BorderRadius.circular(20),
+              //   ),
+              //   child: const Row(
+              //     children: [
+              //       Icon(Icons.bolt, color: Colors.amber, size: 12),
+              //       SizedBox(width: 4),
+              //       Text(
+              //         'Realtime ⚡',
+              //         style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+              //       ),
+              //     ],
+              //   ),
+              // ),
             ],
           ),
           const SizedBox(height: 8),

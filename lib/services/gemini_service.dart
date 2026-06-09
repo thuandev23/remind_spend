@@ -4,6 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_logger.dart';
+import 'bridge_service.dart';
 
 const _tag = 'GeminiService';
 const _apiKeyStorageKey = 'gemini_api_key';
@@ -94,8 +95,29 @@ class GeminiService {
       AppLogger.info(_tag, 'Test connection thành công: $text');
       return text.toUpperCase().contains('OK');
     } catch (e, st) {
+      await _handleLeakedKey(e);
       AppLogger.error(_tag, 'Test connection thất bại', error: e, stack: st);
       return false;
+    }
+  }
+
+  /// Tự động vô hiệu hoá và cảnh báo người dùng khi API Key bị Google/Gemini Server báo rò rỉ (leaked)
+  static Future<void> _handleLeakedKey(dynamic error) async {
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('leaked')) {
+      AppLogger.error(_tag, '⚠️ PHÁT HIỆN GEMINI API KEY BỊ RÒ RỈ! Tự động vô hiệu hoá để bảo mật.');
+      
+      // 1. Tắt cờ bật AI để tránh gửi request vô ích
+      await setAiEnabled(false);
+      
+      // 2. Xoá API Key bị lộ khỏi secure storage bảo mật dòng tiền
+      await deleteApiKey();
+      
+      // 3. Gửi thông báo đẩy cục bộ khẩn cấp cho người dùng
+      await BridgeService.sendLocalNotification(
+        '🔒 Cảnh báo bảo mật API Key!',
+        'Gemini API Key của bạn đã bị lộ (leaked). Hệ thống đã tự động vô hiệu hoá tính năng AI để bảo mật. Vui lòng cấu hình API Key mới.',
+      );
     }
   }
 
@@ -150,6 +172,8 @@ class GeminiService {
         return 'others';
       }
     } catch (e, st) {
+      // Xử lý nếu API Key bị rò rỉ
+      await _handleLeakedKey(e);
       // Bọc an toàn để không crash app khi mất mạng hoặc API Key hết hạn
       AppLogger.error(_tag, 'Lỗi phân loại bằng Gemini API', error: e, stack: st);
       return 'others';

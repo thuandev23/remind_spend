@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -7,6 +8,8 @@ import '../models/category.dart';
 import '../repositories/transaction_repository.dart';
 import '../services/budget_service.dart';
 import 'budget_screen.dart';
+import 'regex_rules_screen.dart';
+// import 'savings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final TransactionRepository repo;
@@ -54,6 +57,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     _loadBudgets(); // Làm mới dữ liệu ngân sách sau khi quay lại
   }
+
+  Future<void> _goToRegexRulesScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RegexRulesScreen(repo: widget.repo),
+      ),
+    );
+  }
+
+  /*
+  Future<void> _goToSavingsScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SavingsScreen(db: widget.repo.db),
+      ),
+    );
+  }
+  */
+
 
   // Helper format tiền tệ VND
   String _formatVnd(num amount) {
@@ -121,12 +145,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         scrolledUnderElevation: 0,
         centerTitle: false,
         actions: [
+          // IconButton(
+          //   icon: const Icon(Icons.code_rounded, color: Color(0xFF1A1A1A)),
+          //   tooltip: 'Quản lý Regex Rules',
+          //   onPressed: _goToRegexRulesScreen,
+          // ),
+          /*
+          IconButton(
+            icon: const Icon(Icons.savings_rounded, color: Color(0xFFFF7597)),
+            tooltip: 'Hũ tích luỹ Kakeibo',
+            onPressed: _goToSavingsScreen,
+          ),
+          */
           IconButton(
             icon: const Icon(Icons.track_changes_rounded, color: Color(0xFF1A1A1A)),
             tooltip: 'Quản lý ngân sách',
             onPressed: _goToBudgetScreen,
           ),
         ],
+
       ),
       body: StreamBuilder<List<Transaction>>(
         stream: _txStream,
@@ -180,9 +217,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildFinancialSummary(totalIncome, totalExpense, netFlow),
               const SizedBox(height: 24),
 
+              /*
+              // Panel Hũ tài chính Kakeibo
+              _buildSavingsDashboardPanel(),
+              const SizedBox(height: 24),
+              */
+
               // Panel ngân sách tổng quan tháng này (Chỉ hiển thị khi đang lọc Tháng này)
               if (_selectedPeriod == 0 && !_loadingBudgets) ...[
-                _buildBudgetOverviewPanel(totalExpense),
+                _buildBudgetOverviewPanel(totalExpense, categorySpending),
                 const SizedBox(height: 24),
               ],
 
@@ -198,6 +241,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  /*
+  // WIDGET: Panel Hũ tài chính Kakeibo tích hợp Dashboard Premium Glassmorphism
+  Widget _buildSavingsDashboardPanel() {
+    return StreamBuilder<List<SavingsEnvelope>>(
+      stream: widget.repo.db.watchAllSavingsEnvelopes(),
+      builder: (context, snapshot) {
+        final envelopes = snapshot.data ?? [];
+        final activeEnvelopes = envelopes.where((e) => e.isActive).toList();
+        if (activeEnvelopes.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        int totalSavings = 0;
+        for (final e in activeEnvelopes) {
+          totalSavings += e.currentAmountVnd;
+        }
+
+        return DashboardSavingsPanel(
+          activeEnvelopes: activeEnvelopes,
+          totalSavings: totalSavings,
+          formatVnd: _formatVnd,
+          onTap: _goToSavingsScreen,
+        );
+      },
+    );
+  }
+  */
 
   // WIDGET: Bộ lọc khoảng thời gian
   Widget _buildPeriodSelector() {
@@ -433,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // WIDGET: Panel Tóm tắt Ngân sách tháng này (Glassmorphism)
-  Widget _buildBudgetOverviewPanel(int totalExpense) {
+  Widget _buildBudgetOverviewPanel(int totalExpense, Map<String, int> categorySpending) {
     int totalBudget = 0;
     for (final val in _budgets.values) {
       totalBudget += val;
@@ -502,6 +573,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : percent >= 0.8
             ? const Color(0xFFFF9500) // Vàng
             : const Color(0xFF34C759); // Xanh lá
+
+    // Phân tích danh mục vượt ngưỡng (>= 80% hoặc >= 100% ngân sách)
+    final List<Map<String, dynamic>> dangerCategories = [];
+    for (final cat in AppCategory.values) {
+      if (cat.id == 'income') continue;
+      final budget = _budgets[cat.id] ?? 0;
+      if (budget <= 0) continue;
+      final spent = categorySpending[cat.id] ?? 0;
+      final double ratio = spent / budget;
+      if (ratio >= 0.8) {
+        dangerCategories.add({
+          'category': cat,
+          'spent': spent,
+          'budget': budget,
+          'ratio': ratio,
+        });
+      }
+    }
+
+    // Sắp xếp các danh mục nguy hiểm theo độ nghiêm trọng giảm dần (vượt hạn mức nhiều nhất lên đầu)
+    dangerCategories.sort((a, b) => (b['ratio'] as double).compareTo(a['ratio'] as double));
 
     return Container(
       width: double.infinity,
@@ -601,6 +693,148 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
+
+                // SMART ALERTS BANNER (Nếu có danh mục chạm hoặc vượt ngưỡng chi tiêu)
+                if (dangerCategories.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF3B30).withValues(alpha: 0.03), // Hồng nhạt cao cấp tối giản
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: const Color(0xFFFF3B30).withValues(alpha: 0.10),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.notification_important_rounded,
+                              color: Color(0xFFFF3B30),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'CẢNH BÁO CHI TIÊU VƯỢT NGƯỠNG',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFFFF3B30),
+                                letterSpacing: 0.5,
+                                fontFamily: 'SF Pro Display',
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF3B30).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${dangerCategories.length} danh mục bị ảnh hưởng',
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFFF3B30),
+                                  fontFamily: 'SF Pro Display',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: dangerCategories.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final item = dangerCategories[index];
+                            final cat = item['category'] as AppCategory;
+                            final spent = item['spent'] as int;
+                            final budget = item['budget'] as int;
+                            final ratio = item['ratio'] as double;
+                            final isOverLimit = ratio >= 1.0;
+
+                            return Row(
+                              children: [
+                                // Icon đại diện danh mục
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: cat.color.withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    cat.icon,
+                                    color: cat.color,
+                                    size: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                // Thông tin chi tiêu cụ thể
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        cat.nameVi,
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF1A1A1A),
+                                          fontFamily: 'SF Pro Display',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 1.5),
+                                      Text(
+                                        'Đã tiêu: ${_formatVnd(spent)} / Hạn mức: ${_formatVnd(budget)}',
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          color: Color(0xFF8E8E93),
+                                          fontWeight: FontWeight.w500,
+                                          fontFamily: 'SF Pro Text',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Badge thông tin phần trăm nguy hiểm
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isOverLimit
+                                        ? const Color(0xFFFF3B30).withValues(alpha: 0.08)
+                                        : const Color(0xFFFF9500).withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    isOverLimit
+                                        ? 'Vượt ${( (ratio - 1.0) * 100 ).toInt()}% ⚠️'
+                                        : 'Đã dùng ${(ratio * 100).toInt()}%',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: isOverLimit ? const Color(0xFFFF3B30) : const Color(0xFFFF9500),
+                                      fontFamily: 'SF Pro Display',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1159,5 +1393,230 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+}
+
+// ── PREMIUM SAVINGS DASHBOARD PANEL WIDGET ───────────────────────────────────
+
+class DashboardSavingsPanel extends StatefulWidget {
+  final List<SavingsEnvelope> activeEnvelopes;
+  final int totalSavings;
+  final String Function(num) formatVnd;
+  final VoidCallback onTap;
+
+  const DashboardSavingsPanel({
+    super.key,
+    required this.activeEnvelopes,
+    required this.totalSavings,
+    required this.formatVnd,
+    required this.onTap,
+  });
+
+  @override
+  State<DashboardSavingsPanel> createState() => _DashboardSavingsPanelState();
+}
+
+class _DashboardSavingsPanelState extends State<DashboardSavingsPanel>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          width: double.infinity,
+          height: 72,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFF5856D6).withOpacity(0.16), // Viền tím-xanh hi-tech mỏng tinh tế
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF5856D6).withOpacity(0.04), // Ánh phát sáng mờ nhẹ neon
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // 1. Nền chất lỏng sóng ngang cuộn mượt mà mờ ảo Glassmorphism
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    return CustomPaint(
+                      painter: _DashboardLiquidPainter(
+                        animationValue: _controller.value,
+                        baseColor: const Color(0xFF007AFF),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // 2. Tấm lọc kính mờ BackdropFilter tạo chiều sâu sang trọng
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                  child: Container(
+                    color: Colors.white.withOpacity(0.76), // Nền mờ kính siêu xịn
+                  ),
+                ),
+              ),
+
+              // 3. Nội dung hiển thị sắc nét ở trên cùng
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Row(
+                  children: [
+                    // Icon hũ neon phát sáng nhè nhẹ
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF007AFF).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.savings_rounded,
+                        color: Color(0xFF007AFF),
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    
+                    // Thông số
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Hũ tài chính Kakeibo 🐷',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF1C1C1E),
+                              fontFamily: 'SF Pro Display',
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 1.5),
+                          Text(
+                            'Tổng tích luỹ: ${widget.formatVnd(widget.totalSavings)}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF5856D6),
+                              fontFamily: 'SF Pro Display',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Mũi tên và số lượng hũ hoạt động
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5856D6).withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${widget.activeEnvelopes.length} hũ',
+                            style: const TextStyle(
+                              color: Color(0xFF5856D6),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: Color(0xFF8E8E93),
+                          size: 13,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardLiquidPainter extends CustomPainter {
+  final double animationValue;
+  final Color baseColor;
+
+  _DashboardLiquidPainter({required this.animationValue, required this.baseColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint1 = Paint()
+      ..color = baseColor.withOpacity(0.06)
+      ..style = PaintingStyle.fill;
+    final paint2 = Paint()
+      ..color = const Color(0xFF5856D6).withOpacity(0.08)
+      ..style = PaintingStyle.fill;
+
+    final path1 = Path();
+    final path2 = Path();
+
+    final double midY = size.height * 0.55;
+    
+    path1.moveTo(0, size.height);
+    path2.moveTo(0, size.height);
+
+    for (double x = 0; x <= size.width; x += 3.0) {
+      final relativeX = x / size.width;
+      // Sóng 1
+      final y1 = midY + 7 * sin((relativeX * 2 * pi * 1.2) + (animationValue * 2 * pi));
+      path1.lineTo(x, y1);
+      // Sóng 2
+      final y2 = midY + 5 * cos((relativeX * 2 * pi * 1.5) - (animationValue * 2 * pi) + pi / 4);
+      path2.lineTo(x, y2);
+    }
+
+    path1.lineTo(size.width, size.height);
+    path1.close();
+    path2.lineTo(size.width, size.height);
+    path2.close();
+
+    canvas.drawPath(path1, paint1);
+    canvas.drawPath(path2, paint2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashboardLiquidPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue;
   }
 }

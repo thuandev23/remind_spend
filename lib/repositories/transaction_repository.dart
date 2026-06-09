@@ -8,6 +8,7 @@ import '../services/bridge_service.dart';
 import '../services/categorization_service.dart';
 import '../services/gemini_service.dart';
 import '../services/budget_service.dart';
+// import '../services/savings_service.dart';
 
 const _tag = 'TransactionRepository';
 
@@ -99,8 +100,13 @@ class TransactionRepository {
   Future<void> approveTransaction(String id) async {
     final tx = await (_db.select(_db.transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
     await _db.approveTransaction(id);
-    if (tx != null && tx.sign == 'debit') {
-      await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+    if (tx != null) {
+      if (tx.sign == 'debit') {
+        await BudgetService.checkAndNotifyBudget(_db, tx.categoryId);
+      } else if (tx.sign == 'credit') {
+        // Tạm ẩn tính năng tự động trích lập hũ khi ẩn hũ tài chính
+        // await SavingsService.autoAllocateCredit(_db, tx.amountVnd, tx.rawContent ?? 'Thu nhập');
+      }
     }
   }
 

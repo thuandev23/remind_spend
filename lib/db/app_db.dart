@@ -9,10 +9,13 @@ import 'package:path_provider/path_provider.dart';
 import '../models/bank_rule.dart';
 import 'tables/regex_config_cache.dart';
 import 'tables/transactions.dart';
+import 'tables/custom_regex_rules.dart';
+import 'tables/savings_envelopes.dart';
+import 'tables/savings_logs.dart';
 
 part 'app_db.g.dart';
 
-@DriftDatabase(tables: [Transactions, RegexConfigCache])
+@DriftDatabase(tables: [Transactions, RegexConfigCache, CustomRegexRules, SavingsEnvelopes, SavingsLogs])
 class AppDb extends _$AppDb {
   AppDb() : super(_openConnection());
 
@@ -20,7 +23,7 @@ class AppDb extends _$AppDb {
   AppDb.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -36,6 +39,13 @@ class AppDb extends _$AppDb {
           }
           if (from < 5) {
             await m.addColumn(transactions, transactions.categoryId);
+          }
+          if (from < 6) {
+            await m.createTable(customRegexRules);
+          }
+          if (from < 7) {
+            await m.createTable(savingsEnvelopes);
+            await m.createTable(savingsLogs);
           }
         },
       );
@@ -91,7 +101,53 @@ class AppDb extends _$AppDb {
       select(regexConfigCache).get();
 
   Future<void> clearRegexConfig() => delete(regexConfigCache).go();
+
+  // ── Custom Regex Rules CRUD ────────────────────────────────────────────────
+
+  Future<void> upsertCustomRegexRule(CustomRegexRulesCompanion entry) =>
+      into(customRegexRules).insertOnConflictUpdate(entry);
+
+  Future<void> updateCustomRegexRule(String id, CustomRegexRulesCompanion entry) =>
+      (update(customRegexRules)..where((t) => t.id.equals(id))).write(entry);
+
+  Future<List<CustomRegexRule>> getAllCustomRegexRules() =>
+      (select(customRegexRules)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
+
+  Future<void> deleteCustomRegexRule(String id) =>
+      (delete(customRegexRules)..where((t) => t.id.equals(id))).go();
+
+  // ── Savings Envelopes CRUD ──────────────────────────────────────────────────
+
+  Future<void> upsertSavingsEnvelope(SavingsEnvelopesCompanion entry) =>
+      into(savingsEnvelopes).insertOnConflictUpdate(entry);
+
+  Future<void> deleteSavingsEnvelope(String id) =>
+      (delete(savingsEnvelopes)..where((t) => t.id.equals(id))).go();
+
+  Future<List<SavingsEnvelope>> getAllSavingsEnvelopes() =>
+      (select(savingsEnvelopes)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
+
+  Stream<List<SavingsEnvelope>> watchAllSavingsEnvelopes() =>
+      (select(savingsEnvelopes)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).watch();
+
+  // ── Savings Logs CRUD ───────────────────────────────────────────────────────
+
+  Future<void> insertSavingsLog(SavingsLogsCompanion entry) =>
+      into(savingsLogs).insert(entry);
+
+  Future<List<SavingsLog>> getEnvelopeLogs(String envelopeId) =>
+      (select(savingsLogs)
+            ..where((t) => t.envelopeId.equals(envelopeId))
+            ..orderBy([(t) => OrderingTerm.desc(t.timestampMs)]))
+          .get();
+
+  Stream<List<SavingsLog>> watchEnvelopeLogs(String envelopeId) =>
+      (select(savingsLogs)
+            ..where((t) => t.envelopeId.equals(envelopeId))
+            ..orderBy([(t) => OrderingTerm.desc(t.timestampMs)]))
+          .watch();
 }
+
 
 // ── Conversion helpers ────────────────────────────────────────────────────────
 

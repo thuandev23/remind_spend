@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../core/app_logger.dart';
 import '../db/app_db.dart';
 import '../models/bank_rule.dart';
-import 'bridge_service.dart';
+import 'regex_sync_service.dart';
 
 const _tag = 'RemoteConfigService';
 
@@ -105,11 +105,10 @@ class RemoteConfigService {
   }
 
   void _pushToNative(List<BankRule> rules) {
-    BridgeService.updateRegexConfig(rules).catchError((Object e) {
-      AppLogger.warn(_tag, 'pushToNative failed: $e');
-    });
+    RegexSyncService.syncAllRules(_db, this);
   }
 }
+
 
 // ── Tier 3: Hardcoded fallback ────────────────────────────────────────────────
 // Mirrors Android RegexConfigLoader.hardcodedRules and iOS BankRegexParser.rules.
