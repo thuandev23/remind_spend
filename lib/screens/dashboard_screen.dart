@@ -1448,12 +1448,12 @@ class _DashboardSavingsPanelState extends State<DashboardSavingsPanel>
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: const Color(0xFF5856D6).withOpacity(0.16), // Viền tím-xanh hi-tech mỏng tinh tế
+              color: const Color(0xFF5856D6).withValues(alpha: 0.16), // Viền tím-xanh hi-tech mỏng tinh tế
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF5856D6).withOpacity(0.04), // Ánh phát sáng mờ nhẹ neon
+                color: const Color(0xFF5856D6).withValues(alpha:0.04), // Ánh phát sáng mờ nhẹ neon
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -1481,7 +1481,7 @@ class _DashboardSavingsPanelState extends State<DashboardSavingsPanel>
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                   child: Container(
-                    color: Colors.white.withOpacity(0.76), // Nền mờ kính siêu xịn
+                    color: Colors.white.withValues(alpha:0.76), // Nền mờ kính siêu xịn
                   ),
                 ),
               ),
@@ -1495,7 +1495,7 @@ class _DashboardSavingsPanelState extends State<DashboardSavingsPanel>
                     Container(
                       padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF007AFF).withOpacity(0.12),
+                        color: const Color(0xFF007AFF).withValues(alpha:0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1542,7 +1542,7 @@ class _DashboardSavingsPanelState extends State<DashboardSavingsPanel>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF5856D6).withOpacity(0.08),
+                            color: const Color(0xFF5856D6).withValues(alpha:0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1582,10 +1582,10 @@ class _DashboardLiquidPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint1 = Paint()
-      ..color = baseColor.withOpacity(0.06)
+      ..color = baseColor.withValues(alpha:0.06)
       ..style = PaintingStyle.fill;
     final paint2 = Paint()
-      ..color = const Color(0xFF5856D6).withOpacity(0.08)
+      ..color = const Color(0xFF5856D6).withValues(alpha:0.08)
       ..style = PaintingStyle.fill;
 
     final path1 = Path();

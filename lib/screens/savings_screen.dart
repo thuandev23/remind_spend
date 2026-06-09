@@ -182,7 +182,7 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
         border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha:0.02),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -206,9 +206,9 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF007AFF).withOpacity(0.08), // Xanh dương nhạt
+                  color: const Color(0xFF007AFF).withValues(alpha:0.08), // Xanh dương nhạt
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.12)),
+                  border: Border.all(color: const Color(0xFF007AFF).withValues(alpha:0.12)),
                 ),
                 child: Text(
                   '$activeCount hũ hoạt động',
@@ -266,7 +266,7 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
         border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha:0.02),
             blurRadius: 12,
             offset: const Offset(0, 6),
           )
@@ -296,7 +296,7 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF007AFF).withOpacity(0.08), // Xanh dương đậm nhạt
+                  color: const Color(0xFF007AFF).withValues(alpha:0.08), // Xanh dương đậm nhạt
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Row(
@@ -434,17 +434,17 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
         duration: const Duration(milliseconds: 300),
         curve: Curves.fastOutSlowIn,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.65), // Kính trắng sữa bóng bẩy
+          color: Colors.white.withValues(alpha:0.65), // Kính trắng sữa bóng bẩy
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.white, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha:0.02),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
             BoxShadow(
-              color: Colors.black.withOpacity(0.015), // Viền đổ bóng siêu mịn ngoài cùng
+              color: Colors.black.withValues(alpha:0.015), // Viền đổ bóng siêu mịn ngoài cùng
               blurRadius: 1,
               offset: const Offset(0, 1),
             ),
@@ -481,9 +481,9 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.white.withOpacity(0.0),
-                          Colors.white.withOpacity(0.5),
-                          Colors.white.withOpacity(0.95),
+                          Colors.white.withValues(alpha:0.0),
+                          Colors.white.withValues(alpha:0.5),
+                          Colors.white.withValues(alpha:0.95),
                         ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
@@ -607,9 +607,9 @@ class _SavingsScreenState extends State<SavingsScreen> with SingleTickerProvider
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (badge['color'] as Color).withOpacity(0.08),
+                  color: (badge['color'] as Color).withValues(alpha:0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: (badge['color'] as Color).withOpacity(0.15)),
+                  border: Border.all(color: (badge['color'] as Color).withValues(alpha:0.15)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -852,20 +852,20 @@ class LiquidWavePainter extends CustomPainter {
     
     // Bóng phát quang neon dịu nhẹ hệ nền sáng
     final hologramGlowPaint = Paint()
-      ..color = color.withOpacity(0.18)
+      ..color = color.withValues(alpha:0.18)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
     canvas.drawOval(pedestalRect, hologramGlowPaint);
     
     // Viền elip thạch anh mờ tinh xảo
     final hologramOutlinePaint = Paint()
-      ..color = color.withOpacity(0.4)
+      ..color = color.withValues(alpha:0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawOval(pedestalRect, hologramOutlinePaint);
     
     // Tâm bục thạch anh mờ bóng kính
     final hologramCorePaint = Paint()
-      ..color = Colors.white.withOpacity(0.45)
+      ..color = Colors.white.withValues(alpha:0.45)
       ..style = PaintingStyle.fill;
     canvas.drawOval(Rect.fromCenter(center: pedestalCenter, width: pedestalWidth * 0.7, height: pedestalHeight * 0.7), hologramCorePaint);
 
@@ -886,7 +886,7 @@ class LiquidWavePainter extends CustomPainter {
 
     // Vẽ nền hũ kính mờ Glassmorphism trắng sữa trong suốt nổi bật trên nền sáng
     final glassBgPaint = Paint()
-      ..color = Colors.white.withOpacity(0.24)
+      ..color = Colors.white.withValues(alpha:0.24)
       ..style = PaintingStyle.fill;
     canvas.drawPath(glassPath, glassBgPaint);
 
@@ -899,7 +899,7 @@ class LiquidWavePainter extends CustomPainter {
       style: TextStyle(
         fontSize: 32,
         fontFamily: 'MaterialIcons',
-        color: color.withOpacity(0.35), // Màu trong suốt dịu nhẹ
+        color: color.withValues(alpha:0.35), // Màu trong suốt dịu nhẹ
         shadows: [
           Shadow(
             color: Colors.white, // Bóng đổ trắng nổi khối 3D trên kính
@@ -907,7 +907,7 @@ class LiquidWavePainter extends CustomPainter {
             offset: const Offset(1.0, 1.0),
           ),
           Shadow(
-            color: color.withOpacity(0.2),
+            color: color.withValues(alpha:0.2),
             blurRadius: 2.0,
             offset: const Offset(-0.5, -0.5),
           ),
@@ -962,9 +962,9 @@ class LiquidWavePainter extends CustomPainter {
     wavePath3.close();
 
     // Vẽ 3 lớp nước pastel mượt mà nhẹ dịu (tối ưu hóa thẩm mỹ trên nền sáng Scaffold)
-    canvas.drawPath(wavePath1, Paint()..color = color.withOpacity(0.10)..style = PaintingStyle.fill);
-    canvas.drawPath(wavePath2, Paint()..color = color.withOpacity(0.24)..style = PaintingStyle.fill);
-    canvas.drawPath(wavePath3, Paint()..color = color.withOpacity(0.50)..style = PaintingStyle.fill);
+    canvas.drawPath(wavePath1, Paint()..color = color.withValues(alpha:0.10)..style = PaintingStyle.fill);
+    canvas.drawPath(wavePath2, Paint()..color = color.withValues(alpha:0.24)..style = PaintingStyle.fill);
+    canvas.drawPath(wavePath3, Paint()..color = color.withValues(alpha:0.50)..style = PaintingStyle.fill);
 
     // 5. Vẽ bọt khí sủi tăm sủi tăm wobble sine ngang
     for (final bubble in bubbles) {
@@ -980,7 +980,7 @@ class LiquidWavePainter extends CustomPainter {
       
       if (rawY > waterY + 4) {
         final bubblePaint = Paint()
-          ..color = Colors.white.withOpacity(opacity * 1.1)
+          ..color = Colors.white.withValues(alpha:opacity * 1.1)
           ..style = PaintingStyle.fill;
         canvas.drawCircle(Offset(wobbleX, rawY), radius, bubblePaint);
       }
@@ -997,7 +997,7 @@ class LiquidWavePainter extends CustomPainter {
       
       if (rawY > waterY + 4) {
         final sparklePaint = Paint()
-          ..color = Colors.white.withOpacity(opacity * (sin(animationValue * 2 * pi * 2) * 0.35 + 0.65))
+          ..color = Colors.white.withValues(alpha:opacity * (sin(animationValue * 2 * pi * 2) * 0.35 + 0.65))
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.0;
         
@@ -1011,13 +1011,13 @@ class LiquidWavePainter extends CustomPainter {
 
     // 7. Vẽ viền Hũ thủy tinh phát sáng và Specular Highlights phản quang kính
     final glassOutlinePaint = Paint()
-      ..color = color.withOpacity(0.28) // Viền kính trong suốt thanh lịch
+      ..color = color.withValues(alpha:0.28) // Viền kính trong suốt thanh lịch
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.5;
     
     // Đổ bóng mờ dịu nhẹ quanh viền hũ
     final glassGlowPaint = Paint()
-      ..color = color.withOpacity(0.08)
+      ..color = color.withValues(alpha:0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 5.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
@@ -1026,7 +1026,7 @@ class LiquidWavePainter extends CustomPainter {
 
     // Specular Highlights: Vết kính phản quang mạn trái hũ (Glass Reflection Highlight)
     final glassReflectionPaint = Paint()
-      ..color = Colors.white.withOpacity(0.45) // Nổi bật vết phản quang trên nền sáng
+      ..color = Colors.white.withValues(alpha:0.45) // Nổi bật vết phản quang trên nền sáng
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     
@@ -1037,7 +1037,7 @@ class LiquidWavePainter extends CustomPainter {
 
     // Specular spot: Chấm phản quang nhỏ mạn phải trên cổ hũ
     final spotPaint = Paint()
-      ..color = Colors.white.withOpacity(0.55)
+      ..color = Colors.white.withValues(alpha:0.55)
       ..style = PaintingStyle.fill;
     canvas.drawOval(
       Rect.fromCenter(center: Offset(right - 14, neckY + 22), width: 4.0, height: 10.0),
@@ -1077,7 +1077,7 @@ class LiquidWavePainter extends CustomPainter {
     canvas.drawPath(capPath, capPaint);
 
     final capBorderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
+      ..color = Colors.white.withValues(alpha:0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8;
     canvas.drawPath(capPath, capBorderPaint);
@@ -1185,7 +1185,7 @@ class _EnvelopeDetailBottomSheetState extends State<_EnvelopeDetailBottomSheet>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: activeColor.withOpacity(0.12),
+                      color: activeColor.withValues(alpha:0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -1238,7 +1238,7 @@ class _EnvelopeDetailBottomSheetState extends State<_EnvelopeDetailBottomSheet>
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.withValues(alpha:0.06),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       )
@@ -1467,7 +1467,7 @@ class _EnvelopeDetailBottomSheetState extends State<_EnvelopeDetailBottomSheet>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: isDeposit ? const Color(0xFF34C759).withOpacity(0.12) : const Color(0xFFFF3B30).withOpacity(0.12),
+                      color: isDeposit ? const Color(0xFF34C759).withValues(alpha:0.12) : const Color(0xFFFF3B30).withValues(alpha:0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -1608,7 +1608,7 @@ class KakeiboQuestPainter extends CustomPainter {
     canvas.drawLine(Offset(startX, y), Offset(endX, y), trailPaint);
 
     final neonTrailPaint = Paint()
-      ..color = const Color(0xFF007AFF).withOpacity(0.08)
+      ..color = const Color(0xFF007AFF).withValues(alpha:0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 7.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
@@ -1629,7 +1629,7 @@ class KakeiboQuestPainter extends CustomPainter {
       
       // Bóng phát sáng nhẹ cho nút mốc
       final msGlowPaint = Paint()
-        ..color = const Color(0xFF007AFF).withOpacity(0.08)
+        ..color = const Color(0xFF007AFF).withValues(alpha:0.08)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
       canvas.drawCircle(Offset(msX, y), 14, msGlowPaint);
 
@@ -1684,7 +1684,7 @@ class KakeiboQuestPainter extends CustomPainter {
 
       // Bóng neon phát sáng màu của hũ
       final envGlowPaint = Paint()
-        ..color = activeColor.withOpacity(0.3)
+        ..color = activeColor.withValues(alpha:0.3)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
       canvas.drawCircle(Offset(envX, envY), 10, envGlowPaint);
 
@@ -1871,7 +1871,7 @@ class _CoinDropPainter extends CustomPainter {
 
       // Bóng neon
       final coinGlowPaint = Paint()
-        ..color = const Color(0xFFFFD700).withOpacity(0.35)
+        ..color = const Color(0xFFFFD700).withValues(alpha:0.35)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
       
       final coinCenter = Offset(coinX, coinY);
@@ -1925,7 +1925,7 @@ class _CoinDropPainter extends CustomPainter {
         p['opacity'] = (1.0 - t).clamp(0.0, 1.0);
 
         final particlePaint = Paint()
-          ..color = splashColor.withOpacity(p['opacity'] as double)
+          ..color = splashColor.withValues(alpha:p['opacity'] as double)
           ..style = PaintingStyle.fill;
 
         canvas.drawCircle(Offset(p['x'] as double, p['y'] as double), p['size'] as double, particlePaint);

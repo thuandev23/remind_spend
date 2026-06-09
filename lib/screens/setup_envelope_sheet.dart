@@ -300,7 +300,7 @@ class _SetupEnvelopeSheetState extends State<SetupEnvelopeSheet> {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: color.withOpacity(0.4),
+                                color: color.withValues(alpha:0.4),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               )
@@ -346,7 +346,7 @@ class _SetupEnvelopeSheetState extends State<SetupEnvelopeSheet> {
                       onTap: () => setState(() => _selectedIconCode = code),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: isSelected ? activeColor.withOpacity(0.15) : const Color(0xFFF2F2F7),
+                          color: isSelected ? activeColor.withValues(alpha:0.15) : const Color(0xFFF2F2F7),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected ? activeColor : Colors.transparent,
