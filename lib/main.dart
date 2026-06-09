@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -84,14 +85,27 @@ class _StartupRouter extends StatefulWidget {
   State<_StartupRouter> createState() => _StartupRouterState();
 }
 
-class _StartupRouterState extends State<_StartupRouter> {
+class _StartupRouterState extends State<_StartupRouter> with WidgetsBindingObserver {
   // null = đang check, true = granted, false = cần onboarding
   bool? _permissionGranted;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkPermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    await widget.repo.db.close();
+    return AppExitResponse.exit;
   }
 
   Future<void> _checkPermission() async {
